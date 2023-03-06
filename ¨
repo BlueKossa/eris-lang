@@ -85,10 +85,8 @@ enum Symbol {
 enum Token {
     EOF,
     Numeric(Numeric),
-    Literal(Literal),
-    Keyword(Keyword),
-    Symbol(Symbol),
     Ident(String),
+    Literal(Literal),
 }
 
 struct Lexer<'a>{
@@ -96,35 +94,6 @@ struct Lexer<'a>{
     input: &'a str,
     x_pos: usize,
     y_pos: usize,
-}
-
-trait ToToken {
-    fn to_token(&self) -> Token;
-}
-
-
-impl ToToken for Numeric {
-    fn to_token(&self) -> Token {
-        Token::Numeric(*self)
-    }
-}
-
-impl ToToken for Literal {
-    fn to_token(&self) -> Token {
-        Token::Literal(*self)
-    }
-}
-
-impl ToToken for Keyword {
-    fn to_token(&self) -> Token {
-        Token::Keyword(*self)
-    }
-}
-
-impl ToToken for Symbol {
-    fn to_token(&self) -> Token {
-        Token::Symbol(*self)
-    }
 }
 
 
@@ -190,9 +159,9 @@ impl<'a> Lexer<'a> {
         });
 
         if dot {
-            Numeric::Float(s.parse().unwrap()).to_token()
+            Token::Numeric(Numeric::Float(s.parse().unwrap()))
         } else {
-            Numeric::Int(s.parse().unwrap()).to_token()
+            Token::Numeric(Numeric::Int(s.parse().unwrap()))
         }
     }
 
@@ -221,24 +190,24 @@ impl<'a> Lexer<'a> {
                 s.push(self.get_next().unwrap());
             }
         }
-        
-        Literal::String(s).to_token()
+
+        Token::Literal(Literal::String(s))
     }
 
 
-    fn get_symbol(&mut self) -> Option<Symbol> {
+    fn get_symbol(&mut self) -> LexerResult {
         let c = self.get_next().unwrap();
         // Return if it's a single character symbol
-        match c {
-            '(' => return Some(Symbol::OpenParen),
-            ')' => return Symbol::CloseParen,
-            '{' => return Symbol::OpenBrace,
-            '}' => return Symbol::CloseBrace,
-            '[' => return Symbol::OpenBracket,
-            ']' => return Symbol::CloseBracket,
-            ',' => return Symbol::Comma,
-            ':' => return Symbol::Colon,
-            ';' => return Symbol::Semicolon,
+        let res = match c {
+            '(' =>  Symbol::OpenParen,
+            ')' =>  Symbol::CloseParen,
+            '{' =>  Symbol::OpenBrace,
+            '}' =>  Symbol::CloseBrace,
+            '[' =>  Symbol::OpenBracket,
+            ']' =>  Symbol::CloseBracket,
+            ',' =>  Symbol::Comma,
+            ':' =>  Symbol::Colon,
+            ';' =>  Symbol::Semicolon,
             _ => {}
         }
 
