@@ -1,3 +1,13 @@
+@Coordinate {
+    x: int
+    y: int
+    z: int
+}
+
 #main(arg1, arg2) {
-    print("Hello World!");
+    coord := @Coordinate { x: 1, y: 2, z: 3 };
+    // coord.x = 2; Error: coord.x is immutable
+    mut coord := @Coordinate { x: 1, y: 2, z: 3 };
+    coord.x = 2; // OK
+    print(coord.x);
 }
