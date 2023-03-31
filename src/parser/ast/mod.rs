@@ -1,4 +1,10 @@
-pub mod block;
-pub mod statement;
-pub mod expression;
-pub mod operator;
+pub mod blocks;
+pub mod statements;
+pub mod expressions;
+pub mod operators;
+pub mod literals;
+pub mod items;
+pub mod functions;
+pub mod structs;
+pub mod types;
+pub mod keywords;

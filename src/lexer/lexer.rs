@@ -4,7 +4,7 @@ use super::literal::{Literal, Number};
 use super::symbol::Symbol;
 use super::token::Token;
 
-type LexResult<'a> = Result<Token<'a>, String>;
+pub type LexResult<'a> = Result<Token<'a>, String>;
 
 pub struct Lexer<'a> {
     source: &'a str,
