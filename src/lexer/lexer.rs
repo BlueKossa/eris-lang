@@ -66,10 +66,9 @@ impl<'a> Lexer<'a> {
         &self.source[start..end]
     }
 
-    fn eat_whitespace(&mut self) -> LexResult<'a> {
+    fn eat_whitespace(&mut self) {
         self.eat_while(|c| c.is_whitespace() || c == '\t' || c == '\r');
 
-        Ok(Token::Whitespace)
     }
 
     fn eat_identifier(&mut self) -> LexResult<'a> {
@@ -160,8 +159,8 @@ impl<'a> Lexer<'a> {
 
     fn eat_comment(&mut self) -> LexResult<'a> {
         self.eat_while(|c| c != '\n');
-
-        Ok(Token::Whitespace)
+        
+        Ok(Token::Comment)
     }
 }
 
@@ -169,6 +168,7 @@ impl<'a> Iterator for Lexer<'a> {
     type Item = LexResult<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.eat_whitespace();
         let c = match self.peek() {
             Some(c) => c,
             None => {
@@ -176,8 +176,6 @@ impl<'a> Iterator for Lexer<'a> {
             }
         };
 
-        println!("{}:{}", self.line, self.column);
-        println!("{}: {}", self.index, c);
 
         let token = match c {
             'a'..='z' | 'A'..='Z' | '_' => self.eat_identifier(),
@@ -186,7 +184,6 @@ impl<'a> Iterator for Lexer<'a> {
             '$' => self.eat_comment(),
             '(' | ')' | '{' | '}' | '[' | ']' | ';' | '\n' | ',' | '.' | '@' | '#' | ':' | '+'
             | '-' | '*' | '/' | '%' | '&' | '|' | '~' | '!' | '=' | '<' | '>' => self.eat_symbol(),
-            ' ' | '\t' | '\r' => self.eat_whitespace(),
             _ => {
                 return Some(Err(format!("Unexpected character: {}", c)));
             }
