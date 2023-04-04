@@ -8,3 +8,4 @@ pub mod functions;
 pub mod structs;
 pub mod types;
 pub mod keywords;
+pub mod locals;

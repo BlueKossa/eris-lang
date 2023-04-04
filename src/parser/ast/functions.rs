@@ -1,13 +1,17 @@
 use super::types::Type;
 use super::blocks::Block;
 
-pub struct FnSig {
-    pub ret: Type,
-    pub args: Vec<Type>,
+
+#[derive(Debug, Clone)]
+pub struct FnSig<'a> {
+    pub ret: Type<'a>,
+    pub args: Vec<Type<'a>>,
 }
 
+
+#[derive(Debug, Clone)]
 pub struct FnDecl<'a> {
     pub name: &'a str,
-    pub sig: FnSig,
+    pub sig: FnSig<'a>,
     pub body: Block<'a>,
 }

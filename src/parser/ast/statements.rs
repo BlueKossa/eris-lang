@@ -1,11 +1,10 @@
 use super::expressions::Expr;
 use super::items::Item;
-use super::literals::Literal;
 
 
 #[derive(Debug, Clone)]
 pub enum Statement<'a> {
-    Local,
-    Item,
+    Local(Expr<'a>, Expr<'a>),
+    Item(Item<'a>),
     Expression(Expr<'a>),
 }

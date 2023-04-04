@@ -23,6 +23,7 @@ use super::ast::{
 pub struct Parser<'a, I: Iterator> {
     pub tokens: Peekable<I>,
     pub errors: Vec<&'a str>,
+    pub last_token: Option<Token<'a>>,
 }
 
 impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
@@ -31,6 +32,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         Self {
             tokens,
             errors: Vec::new(),
+            last_token: None,
         }
     }
 
@@ -43,7 +45,10 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
 
     fn eat_token(&mut self) -> Option<Token<'a>> {
         match self.tokens.next() {
-            Some(Ok(token)) => Some(token),
+            Some(Ok(token)) => {
+                self.last_token = Some(token);
+                Some(token)
+            }
             _ => None,
         }
     }
@@ -129,7 +134,16 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
     fn parse_block(&mut self) -> Option<Block<'a>> {
         let mut statements: Vec<Statement<'a>> = Vec::new();
         loop {
-            match self.peek_token
+            match self.peek_token()? {
+                Token::Symbol(BraceClose) => {
+                    self.eat_token();
+                    break;
+                }
+                Token::Symbol(Semicolon) => {
+                    self.eat_token();
+                }
+                Token::Identifier(_)
+            }
         }
 
         todo!()

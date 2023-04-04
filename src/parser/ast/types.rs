@@ -1,4 +1,6 @@
-pub enum Type {
+
+#[derive(Debug, Clone)]
+pub enum Type<'a> {
     I8,
     I16,
     I32,
@@ -15,8 +17,8 @@ pub enum Type {
     Bool,
     Char,
     Str,
-    Tuple(Vec<Type>),
-    Array(Box<Type>, usize),
-    Slice(Box<Type>),
-    Struct(String),
+    Tuple(Vec<Type<'a>>),
+    Array(Box<Type<'a>>, usize),
+    Slice(Box<Type<'a>>),
+    Struct(&'a str),
 }
