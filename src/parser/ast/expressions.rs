@@ -12,6 +12,7 @@ pub enum ExprKind<'a> {
     Assign(Expr<'a>, Expr<'a>),
     Call(&'a str, Vec<Expr<'a>>),
     Var(&'a str),
+    Return(Option<Expr<'a>>),
 }
 
 impl <'a> Into<Expr<'a>> for ExprKind<'a> {

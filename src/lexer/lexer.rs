@@ -68,7 +68,6 @@ impl<'a> Lexer<'a> {
 
     fn eat_whitespace(&mut self) {
         self.eat_while(|c| c.is_whitespace() || c == '\t' || c == '\r');
-
     }
 
     fn eat_identifier(&mut self) -> LexResult<'a> {
@@ -145,11 +144,7 @@ impl<'a> Lexer<'a> {
                     done = true;
                     true
                 }
-                ':' | '+' | '-' | '*' | '/' | '%' | '&' | '|' | '~' | '!' | '=' | '<' | '>'
-                    if len == 1 =>
-                {
-                    true
-                }
+                ':' | '+' | '-' | '*' | '/' | '%' | '&' | '|' | '~' | '!' | '=' | '<' | '>' => true,
                 _ => false,
             };
         });
@@ -159,7 +154,7 @@ impl<'a> Lexer<'a> {
 
     fn eat_comment(&mut self) -> LexResult<'a> {
         self.eat_while(|c| c != '\n');
-        
+
         Ok(Token::Comment)
     }
 }
@@ -175,7 +170,6 @@ impl<'a> Iterator for Lexer<'a> {
                 return None;
             }
         };
-
 
         let token = match c {
             'a'..='z' | 'A'..='Z' | '_' => self.eat_identifier(),

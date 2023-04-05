@@ -17,3 +17,11 @@ pub enum ItemKind<'a> {
     Constant(&'a str, Type<'a>, Expr<'a>),
 }
 
+
+impl<'a> Into<Item<'a>> for ItemKind<'a> {
+    fn into(self) -> Item<'a> {
+        Item {
+            kind: self,
+        }
+    }
+}

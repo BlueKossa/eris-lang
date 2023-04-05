@@ -5,7 +5,7 @@ use super::blocks::Block;
 #[derive(Debug, Clone)]
 pub struct FnSig<'a> {
     pub ret: Type<'a>,
-    pub args: Vec<Type<'a>>,
+    pub args: Vec<(&'a str, Type<'a>)>,
 }
 
 
@@ -15,3 +15,5 @@ pub struct FnDecl<'a> {
     pub sig: FnSig<'a>,
     pub body: Block<'a>,
 }
+
+
