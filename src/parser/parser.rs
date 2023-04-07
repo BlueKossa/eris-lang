@@ -135,15 +135,9 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 (right_token, left_token)
             {}
 
-            println!("{:?}", right_token);
-
             let (op, p): (BinaryOp, u8) = match right_token.try_into() {
-                Ok(op) => {
-                    println!("{:?}", op);
-                    (op, op.precedence())
-                }
+                Ok(op) => (op, op.precedence()),
                 Err(_) => {
-                    println!("Err {:?}", right_token);
                     break;
                 }
             };
@@ -282,7 +276,6 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
     }
 
     fn parse_block(&mut self) -> ParseResult<'a, Block<'a>> {
-        dbg!("parse_block");
         self.eat_token()?;
         let mut statements: Vec<Statement<'a>> = Vec::new();
         loop {
@@ -310,6 +303,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
     }
 
     fn parse_arg(&mut self) -> ParseResult<'a, (&'a str, Type<'a>)> {
+        println!("parsing arg");
         let name;
         if let Token::Identifier(n) = self.peek_token()? {
             self.eat_token()?;
@@ -328,16 +322,18 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         }
         let mut ty = None;
         loop {
+            println!("matching type");
             match self.peek_token()? {
                 Token::Identifier(t) => {
+                    self.eat_token()?;
                     ty = Some(Type::from_str(t));
                 }
                 Token::Symbol(Comma) | Token::Symbol(ParenClose) => {
                     break;
                 }
-                _ => {
+                t => {
                     return Err(ParseError {
-                        kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+                        kind: ParseErrorKind::UnexpectedToken(Token::EOF),
                     });
                 }
             }
@@ -349,19 +345,21 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         self.eat_token()?;
         let mut args = Vec::new();
         loop {
-            dbg!("Looping");
             match self.peek_token()? {
                 Token::Identifier(_) => {
                     let arg = self.parse_arg()?;
                     args.push(arg);
                 }
+                Token::Symbol(Comma) => {
+                    self.eat_token()?;
+                }
                 Token::Symbol(ParenClose) => {
                     self.eat_token()?;
                     break;
                 }
-                _ => {
+                t => {
                     return Err(ParseError {
-                        kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+                        kind: ParseErrorKind::UnexpectedToken(t),
                     })
                 }
             }
@@ -394,7 +392,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         };
         self.eat_token()?;
         let sig;
-        dbg!("parse_fn_decl");
+
         if let Token::Symbol(ParenOpen) = self.peek_token()? {
             sig = self.parse_fn_header()?;
         } else {
@@ -402,7 +400,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
             });
         }
-        dbg!("blokk");
+
         let block;
         if let Token::Symbol(BraceOpen) = self.peek_token()? {
             block = self.parse_block()?;
@@ -416,5 +414,17 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             name,
             body: block,
         });
+    }
+}
+
+impl<'a, I: Iterator<Item = LexResult<'a>>> Iterator for Parser<'a, I> {
+    type Item = ParseResult<'a, Statement<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.peek_token() {
+            Ok(Token::EOF) => None,
+            Ok(_) => Some(self.parse_identifier()),
+            Err(_) => None,
+        }
     }
 }

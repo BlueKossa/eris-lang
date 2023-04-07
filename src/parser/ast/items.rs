@@ -6,7 +6,7 @@ use super::expressions::Expr;
 
 #[derive(Debug, Clone)]
 pub struct Item<'a> {
-    kind: ItemKind<'a>,
+    pub kind: ItemKind<'a>,
 }
 
 
