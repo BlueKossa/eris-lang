@@ -2,31 +2,35 @@ mod lexer;
 mod parser;
 mod codegen;
 
+use inkwell::context::Context;
 use lexer::lexer::LexResult;
 use lexer::token::Token;
+use parser::ast::blocks::Block;
+use parser::ast::statements::Statement;
 
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
+use crate::codegen::visitor::Visitor;
 
 
 use codegen::codegen::test;
 
 fn main() {
-    let test_file = std::fs::read_to_string("test.eris").unwrap();
-    let mut lexer = Lexer::new("decl main(s : i8) : i8 {
-                                    mut x : i8 = 1;
-                                    x += 1; 
-                                    return 0;
-                                }
-                                decl test(s : i8, t : i8) {
-                                    return s * t;
-                                    }");
-    let mut parser = Parser::new(lexer.into_iter());
-    let x = parser.into_iter();
-    // Print length of iterator
-    for i in x {
-        println!("Item:\n");
-        println!("{:?}", i);
+    let path = std::env::args().nth(1).unwrap();
+    let test_file = std::fs::read_to_string(path).unwrap();
+    let lexer = Lexer::new(&test_file);
+    let parser = Parser::new(lexer.into_iter());
+    let mut block = Block {
+        statements: Vec::new(),
+    };
+    for stmt in parser.into_iter() {
+        println!("{:?}", stmt);
+        block.statements.push(stmt.unwrap());
     }
-    test();
+
+    let ctx = Context::create();
+    let mut visitor = Visitor::new(&ctx, "main");
+    visitor.traverse(&mut block);
+    visitor.module.print_to_stderr();
+    visitor.generate_object_file("tst.o");
 }

@@ -133,7 +133,9 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
 
             if let (Token::Symbol(ParenOpen), Token::Identifier(fn_name)) =
                 (right_token, left_token)
-            {}
+            {
+                return self.parse_fn_call();
+            }
 
             let (op, p): (BinaryOp, u8) = match right_token.try_into() {
                 Ok(op) => (op, op.precedence()),
@@ -273,6 +275,34 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         Err(ParseError {
             kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
         })
+    }
+
+    fn parse_fn_call(&mut self) -> ParseResult<'a, Expr<'a>> {
+        let fn_name = if let Token::Identifier(name) = self.last_token.unwrap() {
+            name
+        } else {
+            return Err(ParseError {
+                kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+            });
+        };
+        self.eat_token()?;
+        let mut args: Vec<Expr<'a>> = Vec::new();
+        loop {
+            match self.peek_token()? {
+                Token::Symbol(ParenClose) => {
+                    self.eat_token()?;
+                    break;
+                }
+                Token::Symbol(Semicolon) => {
+                    self.eat_token()?;
+                }
+                _ => {
+                    let expr = self.parse_expression(0)?;
+                    args.push(expr);
+                }
+            }
+        }
+        Ok(ExprKind::Call(fn_name, args).into())
     }
 
     fn parse_block(&mut self) -> ParseResult<'a, Block<'a>> {

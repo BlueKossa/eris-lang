@@ -1,13 +1,26 @@
-@Coordinate {
-    x: int
-    y: int
-    z: int
+decl double(a: i32) : i32 {
+    return a * 2;
 }
 
-#main(arg1, arg2) {
-    coord := @Coordinate { x: 1, y: 2, z: 3 };
-    // coord.x = 2; Error: coord.x is immutable
-    mut coord := @Coordinate { x: 1, y: 2, z: 3 };
-    coord.x = 2; // OK
-    print(coord.x);
+decl hello_world() {
+    char := double(36);
+    putchar(char);
+    putchar(101);
+    putchar(108);
+    putchar(108);
+    putchar(111);
+    putchar(32);
+    putchar(87);
+    putchar(111);
+    putchar(114);
+    putchar(108);
+    putchar(100);
+    putchar(33);
+    putchar(10);
+}
+
+
+decl main() : i32 {
+    hello_world();
+    return 0;
 }
