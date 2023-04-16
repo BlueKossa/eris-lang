@@ -13,6 +13,7 @@ use crate::lexer::{
 
 use super::ast::functions::{FnDecl, FnSig};
 use super::ast::locals::Local;
+use super::ast::structs::Field;
 use super::ast::types::Type;
 use super::ast::{
     blocks::Block,
@@ -22,6 +23,7 @@ use super::ast::{
     literals::{Literal as AstLiteral, LiteralKind},
     operators::{BinaryOp, UnaryOp},
     statements::Statement,
+    structs::Struct,
 };
 
 pub struct Parser<'a, I: Iterator> {
@@ -79,7 +81,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         let left_token = self.peek_token()?;
         let mut lhs: Expr<'a> = match left_token {
             Token::Literal(literal) => {
-                self.eat_token();
+                self.eat_token()?;
                 match literal {
                     Number(n) => match n {
                         Integer(i) => {
@@ -95,15 +97,43 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             }
 
             Token::Identifier(id) => {
-                self.eat_token();
-                ExprKind::Var(id).into()
+                self.eat_token()?;
+                match id {
+                    "true" => ExprKind::Literal(LiteralKind::Bool(true).into()).into(),
+                    "false" => ExprKind::Literal(LiteralKind::Bool(false).into()).into(),
+                    _ => {
+                        match self.peek_token()? {
+                            Token::Symbol(BraceOpen) => {
+                                self.eat_token()?;
+                                let mut fields = Vec::new();
+                                loop {
+                                    match self.peek_token()? {
+                                        Token::Symbol(BraceClose) => {
+                                            self.eat_token()?;
+                                            break;
+                                        }
+                                        Token::Symbol(Comma) => {
+                                            self.eat_token()?;
+                                        }
+                                        _ => {
+                                            let field = self.parse_expression(0)?;
+                                            fields.push(field);
+                                        }
+                                    }
+                                }
+                                ExprKind::StructInit(id, fields).into()
+                            }
+                            _ => ExprKind::Var(id).into(),
+                        }
+                    }
+                }
             }
 
             Token::Symbol(ParenOpen) => {
-                self.eat_token();
+                self.eat_token()?;
                 let expr = self.parse_expression(0)?;
                 if let Token::Symbol(ParenClose) = self.peek_token()? {
-                    self.eat_token();
+                    self.eat_token()?;
                     expr
                 } else {
                     return Err(ParseError {
@@ -121,7 +151,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
 
         loop {
             let right_token = match self.peek_token() {
-                Ok(Token::Symbol(ColonEqual)) | Ok(Token::Symbol(Colon)) => {
+                Ok(Token::Symbol(ColonEqual)) | Ok(Token::Symbol(Colon)) | Ok(Token::Symbol(ColonColon)) => {
                     return Err(ParseError {
                         kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
                     })
@@ -131,7 +161,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 Err(_) => break,
             };
 
-            if let (Token::Symbol(ParenOpen), Token::Identifier(fn_name)) =
+            if let (Token::Symbol(ParenOpen), Token::Identifier(_)) =
                 (right_token, left_token)
             {
                 return self.parse_fn_call();
@@ -155,6 +185,8 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             if let Some(op) = op.assignment() {
                 let expr = ExprKind::Binary(op, lhs.clone(), rhs);
                 lhs = ExprKind::Assign(lhs, expr.into()).into();
+            } else if let BinaryOp::Equal = op {
+                lhs = ExprKind::Assign(lhs, rhs).into();
             } else {
                 lhs = ExprKind::Binary(op, lhs, rhs).into();
             }
@@ -234,6 +266,13 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         Ok(ExprKind::Return(Some(expr)).into())
     }
 
+    fn parse_while(&mut self) -> ParseResult<'a, Expr<'a>> {
+        self.eat_token()?;
+        let cond = self.parse_expression(0)?;
+        let body = self.parse_block()?;
+        Ok(ExprKind::While(cond, body).into())
+    }
+
     pub fn parse_identifier(&mut self) -> ParseResult<'a, Statement<'a>> {
         if let Token::Identifier(ident) = self.peek_token()? {
             if let Some(keyword) = Keyword::from_str(ident) {
@@ -246,9 +285,13 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         let expr = self.parse_return()?;
                         return Ok(Statement::Expression(expr));
                     }
-                    Decl => {
-                        let func = self.parse_fn_decl()?;
-                        return Ok(Statement::Item(ItemKind::Function(func).into()));
+                    //Decl => {
+                    //    let func = self.parse_fn_decl()?;
+                    //    return Ok(Statement::Item(ItemKind::Function(func).into()));
+                    //}
+                    While => {
+                        let while_loop = self.parse_while()?;
+                        return Ok(Statement::Expression(while_loop));
                     }
                     _ => {
                         return Err(ParseError {
@@ -266,6 +309,31 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         Token::Symbol(ColonEqual) | Token::Symbol(Colon) => {
                             let local = self.parse_local_decl(ident, false)?;
                             return Ok(Statement::Local(local));
+                        }
+                        Token::Symbol(ColonColon) => {
+                            self.eat_token()?;
+                            match self.peek_token()? {
+                                Token::Identifier(name) => {
+                                    match Keyword::from_str(name) {
+                                        Some(Struct) => {
+                                            let struct_decl = self.parse_struct_decl(ident)?;
+                                            return Ok(Statement::Item(ItemKind::Struct(struct_decl).into()));
+                                        }
+                                        _ => {
+                                            todo!("Constant & Union declaration")
+                                        }
+                                    }
+                                }
+                                Token::Symbol(ParenOpen) => {
+                                    let func = self.parse_fn_decl(ident)?;
+                                    return Ok(Statement::Item(ItemKind::Function(func).into()));
+                                }
+                                _ => {
+                                    return Err(ParseError {
+                                        kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+                                    })
+                                }
+                            }
                         }
                         _ => return Err(e),
                     },
@@ -294,6 +362,9 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     break;
                 }
                 Token::Symbol(Semicolon) => {
+                    self.eat_token()?;
+                }
+                Token::Symbol(Comma) => {
                     self.eat_token()?;
                 }
                 _ => {
@@ -333,7 +404,6 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
     }
 
     fn parse_arg(&mut self) -> ParseResult<'a, (&'a str, Type<'a>)> {
-        println!("parsing arg");
         let name;
         if let Token::Identifier(n) = self.peek_token()? {
             self.eat_token()?;
@@ -363,7 +433,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 }
                 t => {
                     return Err(ParseError {
-                        kind: ParseErrorKind::UnexpectedToken(Token::EOF),
+                        kind: ParseErrorKind::UnexpectedToken(t),
                     });
                 }
             }
@@ -410,17 +480,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         return Ok(FnSig { args, ret });
     }
 
-    fn parse_fn_decl(&mut self) -> ParseResult<'a, FnDecl<'a>> {
-        self.eat_token()?;
-        let name = match self.peek_token()? {
-            Token::Identifier(name) => name,
-            _ => {
-                return Err(ParseError {
-                    kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
-                })
-            }
-        };
-        self.eat_token()?;
+    fn parse_fn_decl(&mut self, name: &'a str) -> ParseResult<'a, FnDecl<'a>> {
         let sig;
 
         if let Token::Symbol(ParenOpen) = self.peek_token()? {
@@ -444,6 +504,43 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             name,
             body: block,
         });
+    }
+
+
+    fn parse_struct_decl(&mut self, name: &'a str) -> ParseResult<'a, Struct<'a>> {
+        self.eat_token()?;
+        if let Token::Symbol(BraceOpen) = self.peek_token()? {
+            self.eat_token()?;
+        } else {
+            return Err(ParseError {
+                kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+            });
+        }
+        let mut fields: Vec<Field> = Vec::new();
+        loop {
+            match self.peek_token()? {
+                Token::Identifier(_) => {
+                    let field = self.parse_arg()?;
+                    fields.push(Field {
+                        name: field.0,
+                        ty: field.1,
+                    });
+                }
+                Token::Symbol(Comma) => {
+                    self.eat_token()?;
+                }
+                Token::Symbol(BraceClose) => {
+                    self.eat_token()?;
+                    break;
+                }
+                t => {
+                    return Err(ParseError {
+                        kind: ParseErrorKind::UnexpectedToken(t),
+                    })
+                }
+            }
+        }
+        return Ok(Struct { name, fields });
     }
 }
 

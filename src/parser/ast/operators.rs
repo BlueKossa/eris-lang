@@ -36,6 +36,8 @@ pub enum BinaryOp {
     And,
     // a || b
     Or,
+    // a = b
+    Assign,
     // a += b
     AddAssign,
     // a -= b
@@ -111,6 +113,7 @@ impl<'a> TryFrom<Token<'a>> for BinaryOp {
             Token::Symbol(GreaterEqual) => Ok(BinaryOp::GreaterThanEqual),
             Token::Symbol(AndAnd) => Ok(BinaryOp::And),
             Token::Symbol(PipePipe) => Ok(BinaryOp::Or),
+            Token::Symbol(Equal) => Ok(BinaryOp::Assign),
             Token::Symbol(PlusEqual) => Ok(BinaryOp::AddAssign),
             Token::Symbol(MinusEqual) => Ok(BinaryOp::SubtractAssign),
             Token::Symbol(AsteriskEqual) => Ok(BinaryOp::MultiplyAssign),

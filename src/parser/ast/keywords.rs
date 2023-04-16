@@ -13,7 +13,7 @@ pub enum Keyword {
     Break,
     Continue,
     Match,
-    Class,
+    Struct,
     Union,
 }
 
@@ -32,7 +32,7 @@ impl Keyword {
             "break" => Some(Keyword::Break),
             "continue" => Some(Keyword::Continue),
             "match" => Some(Keyword::Match),
-            "class" => Some(Keyword::Class),
+            "struct" => Some(Keyword::Struct),
             "union" => Some(Keyword::Union),
             _ => None,
         }

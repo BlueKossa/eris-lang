@@ -47,6 +47,8 @@ pub enum Symbol {
     AndAnd,
     PipePipe,
 
+    ColonColon,
+
 }
 
 impl FromStr for Symbol {
@@ -99,6 +101,8 @@ impl FromStr for Symbol {
             ">=" => Ok(Symbol::GreaterEqual),
             "&&" => Ok(Symbol::AndAnd),
             "||" => Ok(Symbol::PipePipe),
+
+            "::" => Ok(Symbol::ColonColon),
 
             _ => Err(format!("Invalid symbol: {}", s)),
         }
