@@ -1,26 +1,16 @@
-decl double(a: i32) : i32 {
-    return a * 2;
-}
-
-decl hello_world() {
-    char := double(36);
-    putchar(char);
-    putchar(101);
-    putchar(108);
-    putchar(108);
-    putchar(111);
-    putchar(32);
-    putchar(87);
-    putchar(111);
-    putchar(114);
-    putchar(108);
-    putchar(100);
-    putchar(33);
-    putchar(10);
+Point :: struct {
+    x: i32,
+    y: i32,
 }
 
 
-decl main() : i32 {
-    hello_world();
+test :: (x : i32) : i32 {
+        return x * 2;
+}
+
+main :: () : i32 {
+    i := Point { 3, 4 };
+    o := "Hello World %d\n";
+    printf(o, test(32));
     return 0;
 }
