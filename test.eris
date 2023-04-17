@@ -1,16 +1,25 @@
-Point :: struct {
+Vec2 :: struct {
     x: i32,
     y: i32,
 }
 
-
-test :: (x : i32) : i32 {
-        return x * 2;
+Vec3 :: struct {
+    x: i32,
+    y: i32,
+    z: i32,
 }
 
+
+add_vec2_vec3 :: (v1: Vec2, v2: Vec3) : Vec3 {
+    v2 := Vec3 { v1.x + v2.x, v1.y + v2.y, v2.z };
+    return v2;
+}
+
+
 main :: () : i32 {
-    i := Point { 3, 4 };
-    o := "Hello World %d\n";
-    printf(o, test(32));
+    one := Vec2 { 60, 20 };
+    two := Vec3 { 9, 400, 1337 };
+    v := add_vec2_vec3(one, two);
+    printf("%d\n%d\n%d\n", v.x, v.y, v.z);
     return 0;
 }
