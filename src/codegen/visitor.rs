@@ -21,14 +21,16 @@ use crate::parser::ast::{
     locals::Local,
     operators::{BinaryOp, UnaryOp},
     statements::Statement,
-    types::Type, structs::Struct,
+    structs::Struct,
+    types::Type,
 };
 
 pub struct Visitor<'a> {
     builder: Builder<'a>,
     context: &'a Context,
     pub module: Module<'a>,
-    values: HashMap<&'a str, (BasicValueEnum<'a>, BasicTypeEnum<'a>)>, 
+    values: HashMap<&'a str, (BasicValueEnum<'a>, BasicTypeEnum<'a>)>,
+    structs: HashMap<&'a str, HashMap<&'a str, usize>>,
 }
 
 pub struct VisitorResult<'a> {
@@ -56,6 +58,7 @@ impl<'a> Visitor<'a> {
             context,
             module: module,
             values: HashMap::new(),
+            structs: HashMap::new(),
         }
     }
 
@@ -87,7 +90,8 @@ impl<'a> Visitor<'a> {
         };
         let alloca = self.builder.build_alloca(val.get_type(), "ptr");
         self.builder.build_store(alloca, val);
-        self.values.insert(local.ident, (alloca.into(), val.get_type()));
+        self.values
+            .insert(local.ident, (alloca.into(), val.get_type()));
         VisitorResult::default()
     }
 
@@ -300,10 +304,15 @@ impl<'a> Visitor<'a> {
                     .value
                     .unwrap()
                     .into_pointer_value();
-                let val = self
+                let mut val = self
                     .traverse_expression_kind(val.kind.as_mut())
                     .value
                     .unwrap();
+
+                if let BasicValueEnum::PointerValue(ptr) = val {
+                    val = self.builder.build_load(self.context.i32_type(), ptr, "load");
+                }
+
                 self.builder.build_store(var, val);
                 return VisitorResult::default();
             }
@@ -356,11 +365,52 @@ impl<'a> Visitor<'a> {
                         .traverse_expression_kind(field.kind.as_mut())
                         .value
                         .unwrap();
-                    let ptr = self.builder.build_struct_gep(struct_ty, ptr_value, i as u32, "field").unwrap();
+                    let ptr = self
+                        .builder
+                        .build_struct_gep(struct_ty, ptr_value, i as u32, "field")
+                        .unwrap();
                     self.builder.build_store(ptr, val);
                 }
 
                 return VisitorResult::new(Some(ptr_value.into()));
+            }
+            ExprKind::FieldAccess(exp, f) => {
+                dbg!("1");
+                let ptr = self
+                    .traverse_expression_kind(exp.kind.as_mut())
+                    .value
+                    .unwrap();
+                let ptr_value;
+                let expr;
+                if let BasicValueEnum::PointerValue(ptr) = ptr {
+                    expr = self.builder.build_load(
+                        self.context.get_struct_type("Point").unwrap(),
+                        ptr,
+                        "load",
+                    );
+                    ptr_value = ptr;
+                } else {
+                    todo!();
+                }
+                let struct_ty = self.context.get_struct_type("Point").unwrap();
+                dbg!("3");
+                let field_index = if let ExprKind::Var(s) = *exp.kind {
+                    dbg!("4");
+                    println!("s: {:?}", self.structs);
+                    let struct_ = self.structs.get("Point").unwrap();
+                    let index = struct_.get(*f).unwrap();
+                    dbg!("5");
+                    *index
+                } else {
+                    todo!()
+                };
+                dbg!("6");
+                let ptr = self
+                    .builder
+                    .build_struct_gep(struct_ty, ptr_value, field_index as u32, "field")
+                    .unwrap();
+                dbg!("7");
+                return VisitorResult::new(Some(ptr.into()));
             }
             _ => todo!(),
         }
@@ -384,17 +434,21 @@ impl<'a> Visitor<'a> {
     fn traverse_struct_decl(&mut self, struct_: &mut Struct<'a>) -> VisitorResult<'a> {
         let name = struct_.name;
         let mut fields: Vec<BasicTypeEnum> = Vec::with_capacity(struct_.fields.len());
+        let mut struct_fields = HashMap::new();
+        let mut i = 0;
         for f in &struct_.fields {
             let field: BasicTypeEnum = match f.ty {
                 Type::I32 => self.context.i32_type().into(),
                 Type::F32 => self.context.f32_type().into(),
                 t => unimplemented!("{:?}", t),
             };
+            struct_fields.insert(f.name, i);
+            i += 1;
             fields.push(field);
         }
         let st = self.context.opaque_struct_type(name);
         st.set_body(&fields, false);
-        
+        self.structs.insert(name, struct_fields);
 
         VisitorResult::default()
     }
