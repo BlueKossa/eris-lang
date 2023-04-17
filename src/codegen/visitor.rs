@@ -35,17 +35,25 @@ pub struct Visitor<'a> {
 
 pub struct VisitorResult<'a> {
     value: Option<BasicValueEnum<'a>>,
+    ty: Option<BasicTypeEnum<'a>>,
 }
 
 impl Default for VisitorResult<'_> {
     fn default() -> Self {
-        VisitorResult { value: None }
+        VisitorResult {
+            value: None,
+            ty: None,
+        }
     }
 }
 
 impl<'a> VisitorResult<'a> {
-    fn new(value: Option<BasicValueEnum<'a>>) -> Self {
-        VisitorResult { value }
+    fn new(value: Option<BasicValueEnum<'a>>, ty: Option<BasicTypeEnum<'a>>) -> Self {
+        VisitorResult { value, ty }
+    }
+
+    fn new_no_type(value: Option<BasicValueEnum<'a>>) -> Self {
+        VisitorResult { value, ty: None }
     }
 }
 
@@ -81,13 +89,17 @@ impl<'a> Visitor<'a> {
     }
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> VisitorResult<'a> {
-        let val = if let Some(v) = local.value.as_mut() {
-            self.traverse_expression_kind(v.kind.as_mut())
-                .value
-                .unwrap()
+        let (mut val, ty) = if let Some(v) = local.value.as_mut() {
+            let res = self.traverse_expression_kind(v.kind.as_mut());
+            (res.value.unwrap(), res.ty)
         } else {
             unimplemented!("No value for local variable")
         };
+        // Dereference pointers
+        if let BasicValueEnum::PointerValue(ptr) = val {
+            val = self.builder.build_load(ty.unwrap(), ptr, "load")
+        }
+
         let alloca = self.builder.build_alloca(val.get_type(), "ptr");
         self.builder.build_store(alloca, val);
         self.values
@@ -98,26 +110,17 @@ impl<'a> Visitor<'a> {
     fn traverse_expression_kind(&mut self, expr: &mut ExprKind<'a>) -> VisitorResult<'a> {
         match expr {
             ExprKind::Binary(op, a, b) => {
-                let mut a_val = self
-                    .traverse_expression_kind(a.kind.as_mut())
-                    .value
-                    .unwrap();
-                let mut b_val = self
-                    .traverse_expression_kind(b.kind.as_mut())
-                    .value
-                    .unwrap();
+                let a = self.traverse_expression_kind(a.kind.as_mut());
+                let b = self.traverse_expression_kind(b.kind.as_mut());
+                let mut a_val = a.value.unwrap();
+                let mut b_val = b.value.unwrap();
+
                 // Dereference pointers
                 if let BasicValueEnum::PointerValue(a_ptr) = a_val {
-                    println!("POINTER HERE: A");
-                    a_val = self
-                        .builder
-                        .build_load(self.context.i32_type(), a_ptr, "load")
+                    a_val = self.builder.build_load(a.ty.unwrap(), a_ptr, "load")
                 }
                 if let BasicValueEnum::PointerValue(b_ptr) = b_val {
-                    println!("POINTER HERE: B");
-                    b_val = self
-                        .builder
-                        .build_load(self.context.i32_type(), b_ptr, "load");
+                    b_val = self.builder.build_load(b.ty.unwrap(), b_ptr, "load");
                 }
 
                 match (a_val, b_val) {
@@ -167,7 +170,7 @@ impl<'a> Visitor<'a> {
                             o => unimplemented!("{:?}", o),
                         };
 
-                        return VisitorResult::new(Some(res.into()));
+                        return VisitorResult::new_no_type(Some(res.into()));
                     }
                     (BasicValueEnum::FloatValue(a), BasicValueEnum::FloatValue(b)) => {
                         let res: BasicValueEnum = match op {
@@ -203,7 +206,7 @@ impl<'a> Visitor<'a> {
                             o => unimplemented!("{:?}", o),
                         };
 
-                        return VisitorResult::new(Some(res));
+                        return VisitorResult::new_no_type(Some(res));
                     }
                     t => todo!("{:?}", t),
                 }
@@ -227,16 +230,16 @@ impl<'a> Visitor<'a> {
                     },
                 };
 
-                return VisitorResult::new(Some(res.into()));
+                return VisitorResult::new(Some(res.into()), None);
             }
             ExprKind::Literal(lit) => match lit.kind {
                 LiteralKind::Int(i) => {
                     let int = self.context.i32_type().const_int(i as u64, false);
-                    return VisitorResult::new(Some(int.into()));
+                    return VisitorResult::new_no_type(Some(int.into()));
                 }
                 LiteralKind::Float(f) => {
                     let float = self.context.f32_type().const_float(f);
-                    return VisitorResult::new(Some(float.into()));
+                    return VisitorResult::new_no_type(Some(float.into()));
                 }
                 LiteralKind::String(s) => {
                     let s_len = s.len() as u32;
@@ -263,11 +266,11 @@ impl<'a> Visitor<'a> {
                         .builder
                         .build_global_string_ptr(&bytes.into_iter().collect::<String>(), "string");
                     let ptr = string.as_pointer_value();
-                    return VisitorResult::new(Some(ptr.into()));
+                    return VisitorResult::new_no_type(Some(ptr.into()));
                 }
                 LiteralKind::Bool(b) => {
                     let bool = self.context.bool_type().const_int(b as u64, false);
-                    return VisitorResult::new(Some(bool.into()));
+                    return VisitorResult::new_no_type(Some(bool.into()));
                 }
             },
             ExprKind::If(_, _) => todo!(),
@@ -304,13 +307,11 @@ impl<'a> Visitor<'a> {
                     .value
                     .unwrap()
                     .into_pointer_value();
-                let mut val = self
-                    .traverse_expression_kind(val.kind.as_mut())
-                    .value
-                    .unwrap();
+                let rhs = self.traverse_expression_kind(val.kind.as_mut());
+                let mut val = rhs.value.unwrap();
 
                 if let BasicValueEnum::PointerValue(ptr) = val {
-                    val = self.builder.build_load(self.context.i32_type(), ptr, "load");
+                    val = self.builder.build_load(rhs.ty.unwrap(), ptr, "load");
                 }
 
                 self.builder.build_store(var, val);
@@ -321,35 +322,49 @@ impl<'a> Visitor<'a> {
                 let param_len = fn_val.count_params();
                 let mut a: Vec<BasicMetadataValueEnum> = Vec::with_capacity(param_len as usize);
                 for arg in args {
-                    let val = if let ExprKind::Var(id) = *arg.kind {
-                        let (ptr, ty) = self.values.get(id).unwrap();
-                        if let BasicValueEnum::PointerValue(ptr) = ptr {
-                            let ptr = self.builder.build_load(*ty, *ptr, "load");
-                            ptr.into()
-                        } else {
-                            *ptr
+                    let val = match *arg.kind {
+                        ExprKind::Var(id) => {
+                            let (ptr, ty) = self.values.get(id).unwrap();
+                            if let BasicValueEnum::PointerValue(ptr) = ptr {
+                                let ptr = self.builder.build_load(*ty, *ptr, "load");
+                                ptr.into()
+                            } else {
+                                *ptr
+                            }
                         }
-                    } else {
-                        self.traverse_expression_kind(arg.kind.as_mut())
+                        ExprKind::FieldAccess(_, _) => {
+                            let res = self.traverse_expression_kind(arg.kind.as_mut());
+                            if let BasicValueEnum::PointerValue(ptr) = res.value.unwrap() {
+                                let ptr = self.builder.build_load(res.ty.unwrap(), ptr, "load");
+                                ptr.into()
+                            } else {
+                                res.value.unwrap()
+                            }
+                        }
+                        _ => self
+                            .traverse_expression_kind(arg.kind.as_mut())
                             .value
-                            .unwrap()
+                            .unwrap(),
                     };
                     a.push(val.into());
                 }
                 let call = self.builder.build_call(fn_val, &a, "call");
                 let basic_val = call.try_as_basic_value().left();
-                return VisitorResult::new(basic_val);
+                return VisitorResult::new(basic_val, fn_val.get_type().get_return_type());
             }
             ExprKind::Var(var) => {
                 let (ptr, ty) = self.values.get(var).unwrap();
-                return VisitorResult::new(Some(*ptr));
+
+                return VisitorResult::new(Some(*ptr), Some(*ty));
             }
             ExprKind::Return(val) => {
                 if let Some(val) = val {
-                    let val = self
-                        .traverse_expression_kind(val.kind.as_mut())
-                        .value
-                        .unwrap();
+                    let res = self.traverse_expression_kind(val.kind.as_mut());
+                    let mut val = res.value.unwrap();
+                    // Dereference
+                    if let BasicValueEnum::PointerValue(ptr) = val {
+                        val = self.builder.build_load(res.ty.unwrap(), ptr, "load");
+                    }
                     self.builder.build_return(Some(&val));
                 } else {
                     self.builder.build_return(None);
@@ -361,10 +376,12 @@ impl<'a> Visitor<'a> {
                 let ptr_value = self.builder.build_alloca(struct_ty, "struct");
 
                 for (i, field) in fields.iter_mut().enumerate() {
-                    let val = self
-                        .traverse_expression_kind(field.kind.as_mut())
-                        .value
-                        .unwrap();
+                    let v = self
+                        .traverse_expression_kind(field.kind.as_mut());
+                    let mut val = v.value.unwrap();
+                    if let BasicValueEnum::PointerValue(ptr) = val {
+                        val = self.builder.build_load(v.ty.unwrap(), ptr, "load");
+                    }
                     let ptr = self
                         .builder
                         .build_struct_gep(struct_ty, ptr_value, i as u32, "field")
@@ -372,45 +389,37 @@ impl<'a> Visitor<'a> {
                     self.builder.build_store(ptr, val);
                 }
 
-                return VisitorResult::new(Some(ptr_value.into()));
+                return VisitorResult::new(Some(ptr_value.into()), Some(struct_ty.into()));
             }
             ExprKind::FieldAccess(exp, f) => {
-                dbg!("1");
-                let ptr = self
-                    .traverse_expression_kind(exp.kind.as_mut())
-                    .value
-                    .unwrap();
+                let expr = self.traverse_expression_kind(exp.kind.as_mut());
+                let ptr = expr.value.unwrap();
+                let ty = expr.ty.unwrap();
                 let ptr_value;
                 let expr;
                 if let BasicValueEnum::PointerValue(ptr) = ptr {
-                    expr = self.builder.build_load(
-                        self.context.get_struct_type("Point").unwrap(),
-                        ptr,
-                        "load",
-                    );
+                    expr = self.builder.build_load(ty.into_struct_type(), ptr, "load");
                     ptr_value = ptr;
                 } else {
-                    todo!();
+                    expr = ptr;
+                    ptr_value = self.builder.build_alloca(ty, "field");
+                    self.builder.build_store(ptr_value, expr);
                 }
-                let struct_ty = self.context.get_struct_type("Point").unwrap();
-                dbg!("3");
-                let field_index = if let ExprKind::Var(s) = *exp.kind {
-                    dbg!("4");
-                    println!("s: {:?}", self.structs);
-                    let struct_ = self.structs.get("Point").unwrap();
-                    let index = struct_.get(*f).unwrap();
-                    dbg!("5");
-                    *index
+                let (field_index, field_type) = if let ExprKind::Var(_) = *exp.kind {
+                    let struct_ty = ty.into_struct_type();
+                    let field_name = struct_ty.get_name().unwrap().to_str().unwrap();
+                    let field_index = *self.structs.get(field_name).unwrap().get(f).unwrap() as u32;
+                    let field_type = struct_ty.get_field_type_at_index(field_index).unwrap();
+                    (field_index, field_type)
                 } else {
                     todo!()
                 };
-                dbg!("6");
                 let ptr = self
                     .builder
-                    .build_struct_gep(struct_ty, ptr_value, field_index as u32, "field")
+                    .build_struct_gep(ty, ptr_value, field_index, "field")
                     .unwrap();
-                dbg!("7");
-                return VisitorResult::new(Some(ptr.into()));
+
+                return VisitorResult::new(Some(ptr.into()), Some(field_type));
             }
             _ => todo!(),
         }
@@ -440,7 +449,11 @@ impl<'a> Visitor<'a> {
             let field: BasicTypeEnum = match f.ty {
                 Type::I32 => self.context.i32_type().into(),
                 Type::F32 => self.context.f32_type().into(),
-                t => unimplemented!("{:?}", t),
+                Type::Struct(s) => {
+                    let ty = self.module.get_struct_type(s).unwrap();
+                    ty.into()
+                }
+                _ => todo!(),
             };
             struct_fields.insert(f.name, i);
             i += 1;
@@ -459,14 +472,20 @@ impl<'a> Visitor<'a> {
         let block = &func.body;
         let mut void = false;
         let mut args: Vec<BasicMetadataTypeEnum> = Vec::with_capacity(sig.args.len());
+        dbg!("FN1");
         for a in &sig.args {
             let arg: BasicMetadataTypeEnum = match a.1 {
                 Type::I32 => self.context.i32_type().into(),
                 Type::F32 => self.context.f32_type().into(),
+                Type::Struct(name) => {
+                    let struct_ty = self.module.get_struct_type(name).unwrap();
+                    struct_ty.into()
+                }
                 t => unimplemented!("{:?}", t),
             };
             args.push(arg);
         }
+        dbg!("FN2");
         let fn_ty = match sig.ret {
             Type::I32 => self.context.i32_type().fn_type(&args, false),
             Type::F32 => self.context.f32_type().fn_type(&args, false),
@@ -474,20 +493,27 @@ impl<'a> Visitor<'a> {
                 void = true;
                 self.context.void_type().fn_type(&args, false)
             }
-            t => unimplemented!("{:?}", t),
+            Type::Struct(s) => {
+                let struct_ty = self.module.get_struct_type(s).unwrap();
+                struct_ty.fn_type(&args, false)
+            }
+            _ => todo!(),
         };
+        dbg!("FN3");
         let func = self.module.add_function(name, fn_ty, None);
         for (i, arg) in sig.args.iter().enumerate() {
             let a = func.get_nth_param(i as u32).unwrap();
             a.set_name(arg.0);
             self.values.insert(arg.0, (a, a.get_type()));
         }
+        dbg!("FN4");
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);
         self.traverse_block(&mut block.to_owned());
         if void {
             self.builder.build_return(None);
         }
+        dbg!("FN5");
         VisitorResult::default()
     }
 
@@ -526,6 +552,5 @@ impl<'a> Visitor<'a> {
         let mut command = Command::new("clang");
         command.arg(path).arg("-o").arg("main");
         let r = command.output().unwrap();
-        println!("{}", String::from_utf8(r.stdout).unwrap());
     }
 }

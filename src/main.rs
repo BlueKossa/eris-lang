@@ -24,7 +24,6 @@ fn main() {
         statements: Vec::new(),
     };
     for stmt in parser.into_iter() {
-        println!("{:?}", stmt);
         block.statements.push(stmt.unwrap());
     }
 
