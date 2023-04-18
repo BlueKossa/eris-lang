@@ -30,6 +30,7 @@ fn main() {
     let ctx = Context::create();
     let mut visitor = Visitor::new(&ctx, "main");
     visitor.traverse(&mut block);
-    visitor.module.print_to_stderr();
+    //visitor.module.print_to_stderr();
+    println!("LLVM:");
     visitor.generate_object_file("tst.o");
 }

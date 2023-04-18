@@ -405,14 +405,22 @@ impl<'a> Visitor<'a> {
                     ptr_value = self.builder.build_alloca(ty, "field");
                     self.builder.build_store(ptr_value, expr);
                 }
-                let (field_index, field_type) = if let ExprKind::Var(_) = *exp.kind {
-                    let struct_ty = ty.into_struct_type();
-                    let field_name = struct_ty.get_name().unwrap().to_str().unwrap();
-                    let field_index = *self.structs.get(field_name).unwrap().get(f).unwrap() as u32;
-                    let field_type = struct_ty.get_field_type_at_index(field_index).unwrap();
-                    (field_index, field_type)
-                } else {
-                    todo!()
+                let (field_index, field_type) = match *exp.kind {
+                    ExprKind::Var(_) => {
+                        let struct_ty = ty.into_struct_type();
+                        let field_name = struct_ty.get_name().unwrap().to_str().unwrap();
+                        let field_index = *self.structs.get(field_name).unwrap().get(f).unwrap() as u32;
+                        let field_type = struct_ty.get_field_type_at_index(field_index).unwrap();
+                        (field_index, field_type)
+                    }
+                    ExprKind::FieldAccess(_, _) => {
+                        let struct_ty = ty.into_struct_type();
+                        let field_name = struct_ty.get_name().unwrap().to_str().unwrap();
+                        let field_index = *self.structs.get(field_name).unwrap().get(f).unwrap() as u32;
+                        let field_type = struct_ty.get_field_type_at_index(field_index).unwrap();
+                        (field_index, field_type)
+                    }
+                    _ => todo!(),
                 };
                 let ptr = self
                     .builder
@@ -549,6 +557,7 @@ impl<'a> Visitor<'a> {
         target_machine
             .write_to_file(&self.module, file_type, Path::new(path))
             .unwrap();
+        println!("CC:");
         let mut command = Command::new("clang");
         command.arg(path).arg("-o").arg("main");
         let r = command.output().unwrap();
