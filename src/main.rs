@@ -13,7 +13,7 @@ use semantic::visitor::SemanticVisitor;
 
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
-use crate::codegen::visitor::Visitor;
+use crate::codegen::visitor::CodeGenVisitor;
 
 
 use codegen::codegen::test;
@@ -41,6 +41,12 @@ fn main() {
     semantic_visitor.run(&mut block);
     let structs = semantic_visitor.structs;
     let fn_decls = semantic_visitor.fn_decls;
-    println!("AST After: {:?}", block);
+    let ctx = Context::create();
+    let mut codegen_visitor = CodeGenVisitor::new(&ctx, "main");
+    codegen_visitor.declare_structs(&structs);
+    codegen_visitor.declare_functions(&fn_decls);
+    codegen_visitor.run(&mut block);
+    codegen_visitor.dump();
+    codegen_visitor.generate_machine_code("tst.o");
 }
 

@@ -13,7 +13,7 @@ use crate::visitor::chainmap::ChainMap;
 pub struct SemanticVisitor<'a> {
     values: ChainMap<&'a str, Type<'a>>,
     pub(crate) fn_decls: HashMap<&'a str, Box<(Vec<Type<'a>>, Type<'a>)>>,
-    pub(crate) structs: HashMap<&'a str, Box<Vec<Type<'a>>>>,
+    pub(crate) structs: HashMap<&'a str, Box<Vec<(&'a str, Type<'a>)>>>,
 }
 
 #[inline(always)]
@@ -26,9 +26,11 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
     type ReturnType = Option<Type<'a>>;
 
     fn traverse_block(&mut self, block: &mut Block<'a>) -> Self::ReturnType {
+        self.values.insert_map();
         for stmt in block.statements.iter_mut() {
             self.traverse_statement(stmt);
         }
+        self.values.pop_map();
         None
     }
 
@@ -79,8 +81,8 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 let struct_ty = *self.structs.get(name).unwrap().to_owned();
                 for (field, expr) in fields.iter_mut().enumerate() {
                     let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
-                    let ty2 = struct_ty.get(field).unwrap();
-                    if &ty1 != ty2 {
+                    let ty2 = struct_ty.get(field).unwrap().1;
+                    if ty1 != ty2 {
                         type_mismatch(&ty1, &ty2);
                     }
                 }
@@ -112,7 +114,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             ExprKind::Var(v) => {
                 Some(self.values.get(v).unwrap().to_owned())
             },
-            ExprKind::Return(_) => todo!(),
+            ExprKind::Return(_) => None,
 
         }
     }
@@ -122,13 +124,16 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             Function(decl) => {
                 self.traverse_function(decl)
             },
-            Struct(_) => todo!(),
+            Struct(s) => {
+                let fields = s.fields.iter().map(|f| (f.name, f.ty)).collect::<Vec<_>>();
+                self.structs.insert(s.name, Box::new(fields));
+                None
+            }
             Constant(_, _, _) => todo!(),
         }
     }
 
     fn traverse_function(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
-        self.values.insert_map();
         let sig = &mut function.sig;
         let args = sig.args.iter().map(|(_name, ty)| *ty).collect::<Vec<_>>();
         self.fn_decls.insert(function.name, Box::new((args, sig.ret)));
@@ -136,7 +141,6 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             self.values.insert(name, *ty);
         }
         self.traverse_block(&mut function.body);
-        self.values.pop_map();
         None
     }
 }
