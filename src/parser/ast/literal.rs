@@ -17,3 +17,12 @@ pub enum LiteralKind<'a> {
     Bool(bool),
 
 }
+
+
+impl Literal {
+    pub fn to_ty(&self) -> Type<'a> {
+        match self.kind {
+
+        }
+    }
+}

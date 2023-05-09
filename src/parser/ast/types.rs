@@ -1,5 +1,5 @@
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Type<'a> {
     Void,
     I8,
@@ -44,6 +44,5 @@ impl<'a> Type<'a> {
             "str" => Type::Str,
             _ => Type::Struct(name),
         }
-
     }
 }

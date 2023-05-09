@@ -1,3 +1,5 @@
+use super::types::Type;
+
 
 #[derive(Debug, Clone)]
 pub enum LiteralKind<'a> {
@@ -15,5 +17,16 @@ pub struct Literal<'a> {
 impl <'a> Into<Literal<'a>> for LiteralKind<'a> {
     fn into(self) -> Literal<'a> {
         Literal { kind: self }
+    }
+}
+
+impl <'a> Literal<'a> {
+    pub fn to_ty(&self) -> Type<'a> {
+        match self.kind {
+            LiteralKind::Int(_) => Type::I64,
+            LiteralKind::Float(_) => Type::F64,
+            LiteralKind::String(_) => Type::Str,
+            LiteralKind::Bool(_) => Type::Bool,
+        }
     }
 }
