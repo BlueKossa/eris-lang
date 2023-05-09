@@ -1,11 +1,13 @@
-use std::{collections::HashMap, process::Command, path::Path};
+use std::{collections::HashMap, path::Path, process::Command};
 
 use inkwell::{
     builder::Builder,
     context::Context,
     module::Module,
+    targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicTypeEnum, FunctionType},
-    values::BasicValueEnum, targets::{Target, InitializationConfig, TargetMachine, RelocMode, CodeModel, FileType}, OptimizationLevel,
+    values::{BasicValueEnum, BasicMetadataValueEnum},
+    OptimizationLevel,
 };
 
 use crate::{
@@ -14,10 +16,11 @@ use crate::{
         expressions::ExprKind,
         functions::FnDecl,
         items::{Item, ItemKind},
+        literals::{Literal, LiteralKind},
         locals::Local,
         operators::{BinaryOp, UnaryOp},
         statements::Statement,
-        types::Type, literals::{Literal, LiteralKind},
+        types::Type,
     },
     visitor::{chainmap::ChainMap, visitor_pattern::MutVisitorPattern},
 };
@@ -53,6 +56,14 @@ impl<'a> CodeGenVisitor<'a> {
             Type::F64 => self.context.f64_type().into(),
             Type::Bool => self.context.bool_type().into(),
             Type::Char => self.context.i8_type().into(),
+            Type::Struct(ident) => {
+                let struct_ty = self.module.get_struct_type(ident);
+                if let Some(struct_ty) = struct_ty {
+                    struct_ty.into()
+                } else {
+                    todo!()
+                }
+            }
             _ => todo!(),
         }
     }
@@ -69,6 +80,15 @@ impl<'a> CodeGenVisitor<'a> {
             Type::F64 => self.context.f64_type().fn_type(args, false),
             Type::Bool => self.context.bool_type().fn_type(args, false),
             Type::Char => self.context.i8_type().fn_type(args, false),
+            Type::Void => self.context.void_type().fn_type(args, false),
+            Type::Struct(ident) => {
+                let struct_ty = self.module.get_struct_type(ident);
+                if let Some(struct_ty) = struct_ty {
+                    struct_ty.fn_type(args, false)
+                } else {
+                    todo!()
+                }
+            }
             _ => todo!(),
         }
     }
@@ -138,7 +158,7 @@ impl<'a> CodeGenVisitor<'a> {
             .unwrap();
         println!("CC:");
         let mut command = Command::new("cc");
-        command.arg(path).arg("-o").arg("main");
+        command.arg(path).arg("-o").arg("a.out");
         let r = command.output().unwrap();
     }
 }
@@ -179,10 +199,16 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
         let ty = self.to_llvm_type(&local.ty.unwrap());
-        let value = match local.value {
-            Some(ref mut expr) => self.traverse_expr(&mut expr.kind).unwrap().value,
+        let (mut value, lty) = match local.value {
+            Some(ref mut expr) => {
+                let res = self.traverse_expr(&mut expr.kind).unwrap();
+                (res.value, res.ty.unwrap())
+            },
             None => todo!(),
         };
+        if let BasicValueEnum::PointerValue(ptr) = value {
+            value = self.builder.build_load(lty, ptr, "load");
+        }
         let alloca = self.builder.build_alloca(ty, local.ident);
         self.builder.build_store(alloca, value);
         self.values.insert(local.ident, (alloca.into(), ty));
@@ -324,18 +350,69 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             }
             ExprKind::Literal(lit) => {
                 let val: BasicValueEnum = match lit.kind {
-                    LiteralKind::Int(i) => self.context.i64_type().const_int(i as u64, false).into(),
+                    LiteralKind::Int(i) => {
+                        self.context.i32_type().const_int(i as u64, false).into()
+                    }
                     LiteralKind::Float(f) => self.context.f64_type().const_float(f).into(),
                     LiteralKind::String(_) => todo!(),
-                    LiteralKind::Bool(b) => self.context.bool_type().const_int(b as u64, false).into(),
+                    LiteralKind::Bool(b) => {
+                        self.context.bool_type().const_int(b as u64, false).into()
+                    }
                 };
                 return Some(CodeGenResult {
                     value: val,
-                    ty: Some(val.get_type())
+                    ty: Some(val.get_type()),
                 });
             }
-            ExprKind::StructInit(_, _) => todo!(),
-            ExprKind::FieldAccess(_, _) => todo!(),
+            ExprKind::StructInit(ident, fields) => {
+                let struct_ty = self.module.get_struct_type(ident).unwrap();
+                let struct_val = self.builder.build_alloca(struct_ty, "struct");
+
+                for (i, field) in fields.iter_mut().enumerate() {
+                    let v = self.traverse_expr(&mut field.kind).unwrap();
+                    let mut val = v.value;
+                    if let BasicValueEnum::PointerValue(ptr) = val {
+                        val = self.builder.build_load(
+                            val.get_type().into_pointer_type(),
+                            ptr,
+                            "load",
+                        );
+                    }
+                    let field_ptr = self
+                        .builder
+                        .build_struct_gep(struct_ty, struct_val, i as u32, "field")
+                        .unwrap();
+                    self.builder.build_store(field_ptr, val);
+                }
+
+                return Some(CodeGenResult {
+                    value: struct_val.into(),
+                    ty: Some(struct_ty.into()),
+                });
+            }
+            ExprKind::FieldAccess(struct_, field) => {
+                let struct_ = self.traverse_expr(&mut struct_.kind).unwrap();
+                let struct_val = struct_.value;
+                let struct_ty = struct_.ty.unwrap();
+                let struct_ptr = if let BasicValueEnum::PointerValue(ptr) = struct_val {
+                    ptr
+                } else {
+                    self.builder.build_alloca(struct_ty, "struct")
+                };
+                let ty = struct_ty.into_struct_type();
+                let struct_name = ty.get_name().unwrap();
+                let fields = self.structs.get(struct_name.to_str().unwrap()).unwrap();
+                let field_index = fields.get(field).unwrap();
+                let field_type = ty.get_field_type_at_index(*field_index as u32).unwrap();
+                let field_ptr = self
+                    .builder
+                    .build_struct_gep(struct_ty.into_struct_type(), struct_ptr, *field_index as u32, "fieldaccess")
+                    .unwrap();
+                return Some(CodeGenResult {
+                    value: field_ptr.into(),
+                    ty: Some(field_type),
+                });
+            }
             ExprKind::MethodCall(_, _, _) => todo!(),
             ExprKind::If(_, _) => todo!(),
             ExprKind::While(_, _) => todo!(),
@@ -350,10 +427,35 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 if let BasicValueEnum::PointerValue(ptr) = lhs_val {
                     lhs_val = self.builder.build_load(lhs.ty.unwrap(), ptr, "load");
                 }
-                self.builder.build_store(lhs_val.into_pointer_value(), rhs_val);
+                self.builder
+                    .build_store(lhs_val.into_pointer_value(), rhs_val);
                 return None;
             }
-            ExprKind::Call(_, _) => todo!(),
+            ExprKind::Call(ident, params) => {
+                let func = self.module.get_function(ident).unwrap();
+                    let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
+                for param in params {
+                    let param = self.traverse_expr(&mut param.kind).unwrap();
+                    let mut param_val = param.value;
+                    if let BasicValueEnum::PointerValue(ptr) = param_val {
+                        param_val = self.builder.build_load(param.ty.unwrap(), ptr, "load");
+                    }
+                    args.push(param_val.into());
+                }
+
+                let val = self
+                    .builder
+                    .build_call(func, &args, "call")
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap();
+                return Some(CodeGenResult {
+                    value: val,
+                    ty: Some(val.get_type()),
+                });
+
+
+            }
             ExprKind::Var(ident) => {
                 let val = self.values.get(ident).unwrap();
                 return Some(CodeGenResult {
@@ -366,7 +468,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     let expr = self.traverse_expr(&mut expr.kind).unwrap();
                     let mut expr_val = expr.value;
                     if let BasicValueEnum::PointerValue(ptr) = expr_val {
-                        expr_val = self.builder.build_load(expr.ty.unwrap(), ptr, "load");
+                        expr_val = self.builder.build_load(expr.ty.unwrap(), ptr, "loadret");
                     }
                     self.builder.build_return(Some(&expr_val));
                 } else {

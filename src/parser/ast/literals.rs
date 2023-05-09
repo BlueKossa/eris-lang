@@ -23,8 +23,8 @@ impl <'a> Into<Literal<'a>> for LiteralKind<'a> {
 impl <'a> Literal<'a> {
     pub fn to_ty(&self) -> Type<'a> {
         match self.kind {
-            LiteralKind::Int(_) => Type::I64,
-            LiteralKind::Float(_) => Type::F64,
+            LiteralKind::Int(_) => Type::I32,
+            LiteralKind::Float(_) => Type::F32,
             LiteralKind::String(_) => Type::Str,
             LiteralKind::Bool(_) => Type::Bool,
         }

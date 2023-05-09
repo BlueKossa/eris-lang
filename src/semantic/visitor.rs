@@ -86,9 +86,18 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                         type_mismatch(&ty1, &ty2);
                     }
                 }
-                None
+                Some(Type::Struct(name))
             }
-            ExprKind::FieldAccess(_, _) => todo!(),
+            ExprKind::FieldAccess(struct_, field) => {
+                let struct_ty = self.traverse_expr(&mut struct_.kind).unwrap();
+                if let Type::Struct(name) = struct_ty {
+                    let struct_ty = *self.structs.get(name).unwrap().to_owned();
+                    let field_ty = struct_ty.iter().find(|(f, _)| f == field).unwrap().1;
+                    Some(field_ty)
+                } else {
+                    panic!("Expected struct type, found {:?}", struct_ty);
+                }
+            }
             ExprKind::MethodCall(_, _, _) => todo!(),
             ExprKind::If(_, _) => todo!(),
             ExprKind::While(_, _) => todo!(),
