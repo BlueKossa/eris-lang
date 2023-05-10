@@ -39,12 +39,14 @@ fn main() {
     println!("AST Before: {:?}", block);
     let mut semantic_visitor = SemanticVisitor::new();
     semantic_visitor.run(&mut block);
+    println!("AST After: {:?}", block);
     let structs = semantic_visitor.structs;
     let fn_decls = semantic_visitor.fn_decls;
     let ctx = Context::create();
     let mut codegen_visitor = CodeGenVisitor::new(&ctx, "main");
     codegen_visitor.declare_structs(&structs);
     codegen_visitor.declare_functions(&fn_decls);
+    codegen_visitor.create_clib_functions();
     codegen_visitor.run(&mut block);
     codegen_visitor.dump();
     codegen_visitor.generate_machine_code("tst.o");

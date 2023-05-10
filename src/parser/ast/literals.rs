@@ -1,4 +1,4 @@
-use super::types::Type;
+use super::types::{Type, TypeKind};
 
 
 #[derive(Debug, Clone)]
@@ -23,10 +23,10 @@ impl <'a> Into<Literal<'a>> for LiteralKind<'a> {
 impl <'a> Literal<'a> {
     pub fn to_ty(&self) -> Type<'a> {
         match self.kind {
-            LiteralKind::Int(_) => Type::I32,
-            LiteralKind::Float(_) => Type::F32,
-            LiteralKind::String(_) => Type::Str,
-            LiteralKind::Bool(_) => Type::Bool,
-        }
+            LiteralKind::Int(_) => TypeKind::I32,
+            LiteralKind::Float(_) => TypeKind::F32,
+            LiteralKind::String(_) => TypeKind::Str,
+            LiteralKind::Bool(_) => TypeKind::Bool,
+        }.into()
     }
 }

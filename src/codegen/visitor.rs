@@ -5,9 +5,9 @@ use inkwell::{
     context::Context,
     module::Module,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
-    types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicTypeEnum, FunctionType},
-    values::{BasicValueEnum, BasicMetadataValueEnum},
-    OptimizationLevel,
+    types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
+    values::{BasicMetadataValueEnum, BasicValueEnum},
+    AddressSpace, OptimizationLevel,
 };
 
 use crate::{
@@ -20,7 +20,7 @@ use crate::{
         locals::Local,
         operators::{BinaryOp, UnaryOp},
         statements::Statement,
-        types::Type,
+        types::{Type, TypeKind},
     },
     visitor::{chainmap::ChainMap, visitor_pattern::MutVisitorPattern},
 };
@@ -49,20 +49,30 @@ impl<'a> CodeGenVisitor<'a> {
     }
 
     fn to_llvm_type(&mut self, ty: &Type<'a>) -> BasicTypeEnum<'a> {
-        match ty {
-            Type::I32 => self.context.i32_type().into(),
-            Type::I64 => self.context.i64_type().into(),
-            Type::F32 => self.context.f32_type().into(),
-            Type::F64 => self.context.f64_type().into(),
-            Type::Bool => self.context.bool_type().into(),
-            Type::Char => self.context.i8_type().into(),
-            Type::Struct(ident) => {
+        match &*ty.kind {
+            TypeKind::I32 => self.context.i32_type().into(),
+            TypeKind::I64 => self.context.i64_type().into(),
+            TypeKind::F32 => self.context.f32_type().into(),
+            TypeKind::F64 => self.context.f64_type().into(),
+            TypeKind::Bool => self.context.bool_type().into(),
+            TypeKind::Char => self.context.i8_type().into(),
+            TypeKind::Struct(ident) => {
                 let struct_ty = self.module.get_struct_type(ident);
                 if let Some(struct_ty) = struct_ty {
                     struct_ty.into()
                 } else {
                     todo!()
                 }
+            }
+            TypeKind::Str => self
+                .context
+                .i8_type()
+                .ptr_type(AddressSpace::default())
+                .into(),
+            TypeKind::Array(ty, len) => {
+                let ty = self.to_llvm_type(&ty);
+                let arr_ty = ty.array_type(*len as u32 + 1);
+                arr_ty.into()
             }
             _ => todo!(),
         }
@@ -73,15 +83,15 @@ impl<'a> CodeGenVisitor<'a> {
         ty: &Type<'a>,
         args: &[BasicMetadataTypeEnum<'a>],
     ) -> FunctionType<'a> {
-        match ty {
-            Type::I32 => self.context.i32_type().fn_type(args, false),
-            Type::I64 => self.context.i64_type().fn_type(args, false),
-            Type::F32 => self.context.f32_type().fn_type(args, false),
-            Type::F64 => self.context.f64_type().fn_type(args, false),
-            Type::Bool => self.context.bool_type().fn_type(args, false),
-            Type::Char => self.context.i8_type().fn_type(args, false),
-            Type::Void => self.context.void_type().fn_type(args, false),
-            Type::Struct(ident) => {
+        match *ty.kind {
+            TypeKind::I32 => self.context.i32_type().fn_type(args, false),
+            TypeKind::I64 => self.context.i64_type().fn_type(args, false),
+            TypeKind::F32 => self.context.f32_type().fn_type(args, false),
+            TypeKind::F64 => self.context.f64_type().fn_type(args, false),
+            TypeKind::Bool => self.context.bool_type().fn_type(args, false),
+            TypeKind::Char => self.context.i8_type().fn_type(args, false),
+            TypeKind::Void => self.context.void_type().fn_type(args, false),
+            TypeKind::Struct(ident) => {
                 let struct_ty = self.module.get_struct_type(ident);
                 if let Some(struct_ty) = struct_ty {
                     struct_ty.fn_type(args, false)
@@ -110,6 +120,15 @@ impl<'a> CodeGenVisitor<'a> {
             let fn_type = self.to_llvm_fn_type(ret_ty, &param_types);
             self.module.add_function(name, fn_type, None);
         }
+    }
+
+    pub fn create_clib_functions(&mut self) {
+        let i32_type = self.context.i32_type();
+        let char_type = self.context.i8_type().ptr_type(AddressSpace::default());
+        let fn_ty = i32_type.fn_type(&[char_type.into()], false);
+        self.module.add_function("printf", fn_ty, None);
+        let fn_ty = i32_type.fn_type(&[i32_type.into()], false);
+        self.module.add_function("putchar", fn_ty, None);
     }
 
     pub fn declare_structs(&mut self, structs: &HashMap<&'a str, Box<Vec<(&'a str, Type<'a>)>>>) {
@@ -156,7 +175,7 @@ impl<'a> CodeGenVisitor<'a> {
         target_machine
             .write_to_file(&self.module, file_type, Path::new(path))
             .unwrap();
-        println!("CC:");
+
         let mut command = Command::new("cc");
         command.arg(path).arg("-o").arg("a.out");
         let r = command.output().unwrap();
@@ -198,18 +217,22 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
     }
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
-        let ty = self.to_llvm_type(&local.ty.unwrap());
+        let ty = self.to_llvm_type(&local.ty.as_ref().unwrap());
         let (mut value, lty) = match local.value {
             Some(ref mut expr) => {
                 let res = self.traverse_expr(&mut expr.kind).unwrap();
                 (res.value, res.ty.unwrap())
-            },
+            }
             None => todo!(),
         };
         if let BasicValueEnum::PointerValue(ptr) = value {
-            value = self.builder.build_load(lty, ptr, "load");
+            if !lty.is_pointer_type() {
+                value = self.builder.build_load(lty, ptr, "load");
+            }
         }
+
         let alloca = self.builder.build_alloca(ty, local.ident);
+
         self.builder.build_store(alloca, value);
         self.values.insert(local.ident, (alloca.into(), ty));
         None
@@ -354,7 +377,34 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                         self.context.i32_type().const_int(i as u64, false).into()
                     }
                     LiteralKind::Float(f) => self.context.f64_type().const_float(f).into(),
-                    LiteralKind::String(_) => todo!(),
+                    LiteralKind::String(s) => {
+                        let mut esc = false;
+                        let bytes = &s[1..s.len() - 1];
+                        let mut s = String::new();
+                        for c in bytes.chars() {
+                            if esc {
+                                match c {
+                                    'n' => s.push('\n'),
+                                    't' => s.push('\t'),
+                                    'r' => s.push('\r'),
+                                    '\\' => s.push('\\'),
+                                    '"' => s.push('"'),
+                                    ch => s.push(ch),
+                                }
+                                esc = false;
+                            } else if c == '\\' {
+                                esc = true;
+                            } else {
+                                s.push(c);
+                            }
+                        }
+                        let string = self.builder.build_global_string_ptr(&s, "string");
+                        let ptr = string.as_pointer_value();
+                        return Some(CodeGenResult {
+                            value: ptr.into(),
+                            ty: Some(ptr.get_type().into()),
+                        });
+                    }
                     LiteralKind::Bool(b) => {
                         self.context.bool_type().const_int(b as u64, false).into()
                     }
@@ -362,6 +412,53 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 return Some(CodeGenResult {
                     value: val,
                     ty: Some(val.get_type()),
+                });
+            }
+            ExprKind::Array(exprs) => {
+                // Constant arrays
+                // How it SHOULD be done:
+                // %1 = alloca i32, align 4
+                // %2 = alloca i32, align 4
+                // %3 = alloca [2 x i32], align 4
+                // store i32 0, ptr %1, align 4
+                // store i32 1, ptr %2, align 4
+                // %4 = getelementptr inbounds [2 x i32], ptr %3, i64 0, i64 0
+                // %5 = load i32, ptr %2, align 4
+                // store i32 %5, ptr %4, align 4
+                // %6 = getelementptr inbounds i32, ptr %4, i64 1
+                // store i32 2, ptr %6, align 4
+                // ret i32 0
+                //
+                // this is:
+                // int main() {
+                // int x = 1;
+                // int arr[2] = {x, 2};
+                // return 0;
+                let elem_ty = self.traverse_expr(&mut exprs[0].kind).unwrap().ty.unwrap();
+                let len = exprs.len() as u32;
+                let array_type = elem_ty.array_type(len);
+                let array_alloc = self.builder.build_alloca(array_type, "array");
+                let array_val = self
+                    .builder
+                    .build_load(array_type, array_alloc, "array_load")
+                    .into_array_value();
+                println!("Loading Elements");
+                for (i, expr) in exprs.iter_mut().enumerate() {
+                    let v = self.traverse_expr(&mut expr.kind).unwrap();
+                    let mut val = v.value;
+                    if let BasicValueEnum::PointerValue(ptr) = val {
+                        val = self.builder.build_load(
+                            val.get_type().into_pointer_type(),
+                            ptr,
+                            "load",
+                        );
+                    }
+                    self.builder
+                        .build_insert_value(array_val, val, i as u32, "insert");
+                }
+                return Some(CodeGenResult {
+                    value: array_val.into(),
+                    ty: Some(array_type.into()),
                 });
             }
             ExprKind::StructInit(ident, fields) => {
@@ -406,7 +503,12 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let field_type = ty.get_field_type_at_index(*field_index as u32).unwrap();
                 let field_ptr = self
                     .builder
-                    .build_struct_gep(struct_ty.into_struct_type(), struct_ptr, *field_index as u32, "fieldaccess")
+                    .build_struct_gep(
+                        struct_ty.into_struct_type(),
+                        struct_ptr,
+                        *field_index as u32,
+                        "fieldaccess",
+                    )
                     .unwrap();
                 return Some(CodeGenResult {
                     value: field_ptr.into(),
@@ -433,13 +535,20 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             }
             ExprKind::Call(ident, params) => {
                 let func = self.module.get_function(ident).unwrap();
-                    let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
+                let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
                 for param in params {
-                    let param = self.traverse_expr(&mut param.kind).unwrap();
-                    let mut param_val = param.value;
-                    if let BasicValueEnum::PointerValue(ptr) = param_val {
-                        param_val = self.builder.build_load(param.ty.unwrap(), ptr, "load");
-                    }
+                    let param_val = match *param.kind {
+                        ExprKind::Var(_) | ExprKind::FieldAccess(_, _) => {
+                            let res = self.traverse_expr(&mut param.kind).unwrap();
+                            let (val, ty) = (res.value, res.ty.unwrap());
+                            if let BasicValueEnum::PointerValue(ptr) = val {
+                                self.builder.build_load(ty, ptr, "load")
+                            } else {
+                                val
+                            }
+                        }
+                        _ => self.traverse_expr(&mut param.kind).unwrap().value,
+                    };
                     args.push(param_val.into());
                 }
 
@@ -453,8 +562,6 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     value: val,
                     ty: Some(val.get_type()),
                 });
-
-
             }
             ExprKind::Var(ident) => {
                 let val = self.values.get(ident).unwrap();

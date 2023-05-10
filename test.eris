@@ -1,21 +1,5 @@
-Test :: struct {
-    x: i32,
-    y: i32
-}
-
-double :: (x: i32) : i32 {
-    dbl := x * 2;
-    return dbl;
-}
-
-
-funny_struct :: () : Test {
-    s := Test { 139, 420 };
-    return s
-}
 
 main :: () : i32 {
-    a := Test { 69, 0 };
-    fny := funny_struct();
-    return fny.x;
+    monke := [3, 4];
+    return 0;
 }

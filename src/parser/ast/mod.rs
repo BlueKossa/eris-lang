@@ -9,3 +9,4 @@ pub mod structs;
 pub mod types;
 pub mod keywords;
 pub mod locals;
+pub mod arrays;

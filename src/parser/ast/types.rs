@@ -1,6 +1,11 @@
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Type<'a> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Type<'a> {
+    pub kind: Box<TypeKind<'a>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeKind<'a> {
     Void,
     I8,
     I16,
@@ -18,6 +23,7 @@ pub enum Type<'a> {
     Bool,
     Char,
     Str,
+    Array(Type<'a>, usize),
     Struct(&'a str),
 }
 
@@ -25,24 +31,32 @@ pub enum Type<'a> {
 impl<'a> Type<'a> {
     pub fn from_str(name: &'a str) -> Self {
         match name {
-            "void" => Type::Void,
-            "i8" => Type::I8,
-            "i16" => Type::I16,
-            "i32" => Type::I32,
-            "i64" => Type::I64,
-            "i128" => Type::I128,
-            "u8" => Type::U8,
-            "u16" => Type::U16,
-            "u32" => Type::U32,
-            "u64" => Type::U64,
-            "u128" => Type::U128,
-            "f32" => Type::F32,
-            "f64" => Type::F64,
-            "f128" => Type::F128,
-            "bool" => Type::Bool,
-            "char" => Type::Char,
-            "str" => Type::Str,
-            _ => Type::Struct(name),
-        }
+            "void" => TypeKind::Void,
+            "i8" => TypeKind::I8,
+            "i16" => TypeKind::I16,
+            "i32" => TypeKind::I32,
+            "i64" => TypeKind::I64,
+            "i128" => TypeKind::I128,
+            "u8" => TypeKind::U8,
+            "u16" => TypeKind::U16,
+            "u32" => TypeKind::U32,
+            "u64" => TypeKind::U64,
+            "u128" => TypeKind::U128,
+            "f32" => TypeKind::F32,
+            "f64" => TypeKind::F64,
+            "f128" => TypeKind::F128,
+            "bool" => TypeKind::Bool,
+            "char" => TypeKind::Char,
+            "str" => TypeKind::Str,
+            _ => TypeKind::Struct(name),
+        }.into()
     }
 }
+
+impl<'a> Into<Type<'a>> for TypeKind<'a> {
+    fn into(self) -> Type<'a> {
+        Type { kind: Box::new(self) }
+    }
+}
+
+

@@ -14,7 +14,7 @@ use crate::lexer::{
 use super::ast::functions::{FnDecl, FnSig};
 use super::ast::locals::Local;
 use super::ast::structs::Field;
-use super::ast::types::Type;
+use super::ast::types::{Type, TypeKind};
 use super::ast::{
     blocks::Block,
     expressions::{Expr, ExprKind},
@@ -139,6 +139,28 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
                     });
                 }
+            }
+
+            Token::Symbol(BracketOpen) => {
+                self.eat_token()?;
+                let mut array = Vec::new();
+                loop {
+                    match self.peek_token()? {
+                        Token::Symbol(BracketClose) => {
+                            self.eat_token()?;
+                            break;
+                        }
+                        Token::Symbol(Comma) => {
+                            self.eat_token()?;
+                        }
+                        _ => {
+                            let expr = self.parse_expression(0)?;
+                            array.push(expr);
+                        }
+                    }
+                }
+                ExprKind::Array(array).into()
+
             }
             _ => {
                 println!("Unexpected token: {:?}", self.last_token);
@@ -484,7 +506,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 }
             }
         }
-        let mut ret = Type::Void;
+        let mut ret = TypeKind::Void.into();
         if let Token::Symbol(Colon) = self.peek_token()? {
             self.eat_token()?;
             if let Token::Identifier(t) = self.peek_token()? {
