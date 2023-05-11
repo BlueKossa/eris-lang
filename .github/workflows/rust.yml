@@ -11,8 +11,6 @@ on:
   
 env:
   IMAGE_NAME: rust-llvm
-  IMAGE_VERSION: 14-1.67
-  LLVM_SYS_150_PREFIX: D:\a\eris-lang\eris-lang\llvm
 
 jobs:
   test-windows:
@@ -20,7 +18,7 @@ jobs:
     runs-on: windows-2022
     env:
       toolchain-version: 1.67.0
-      llvm-version: 15.0
+      llvm-version: 14.0.6
     steps:
 
       - uses: actions/checkout@v3
@@ -31,7 +29,7 @@ jobs:
           toolchain: ${{ env.toolchain-version }}
 
       - name: Install LLVM
-        uses: ghaith/install-llvm-action@latest
+        uses: KyleMayes/install-llvm-action@v1
         with:
           version: ${{ env.llvm-version }}
           directory: "./llvm"
