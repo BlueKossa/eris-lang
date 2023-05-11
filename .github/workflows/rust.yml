@@ -12,7 +12,7 @@ on:
 env:
   IMAGE_NAME: rust-llvm
   IMAGE_VERSION: 14-1.67
-  LLVM_SYS_150_PREFIX: "./llvm"
+  LLVM_SYS_150_PREFIX: D:\a\eris-lang\eris-lang\llvm
 
 jobs:
   test-windows:
@@ -37,7 +37,7 @@ jobs:
           directory: "./llvm"
       
       - name: Check LLVM
-        run: dir llvm
+        run: dir $env:LLVM_SYS_150_PREFIX
       - name: Check LLVM_SYS
         run: echo $env:LLVM_SYS_150_PREFIX
       
