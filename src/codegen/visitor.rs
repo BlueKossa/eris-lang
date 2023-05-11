@@ -74,6 +74,8 @@ impl<'a> CodeGenVisitor<'a> {
                 let arr_ty = ty.array_type(*len as u32 + 1);
                 arr_ty.into()
             }
+            // TODO: Fix this, void is not supposed to be an int
+            TypeKind::Void => self.context.i8_type().into(),
             _ => todo!(),
         }
     }
@@ -603,16 +605,17 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     };
                     args.push(param_val.into());
                 }
-
+                
                 let val = self
                     .builder
                     .build_call(func, &args, "call")
                     .try_as_basic_value()
-                    .left()
-                    .unwrap();
+                    .left();
+                //TODO: Fix this, void functions should return void
+                let ret = val.unwrap_or_else(|| self.context.i32_type().const_zero().into());
                 return Some(CodeGenResult {
-                    value: val,
-                    ty: Some(val.get_type()),
+                    value: ret,
+                    ty: Some(ret.get_type()),
                 });
             }
             ExprKind::Var(ident) => {
