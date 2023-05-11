@@ -39,7 +39,7 @@ jobs:
       - name: Check LLVM
         run: dir llvm
       - name: Check LLVM_SYS
-        run: echo %LLVM_SYS_150_PREFIX%
+        run: echo $env:LLVM_SYS_150_PREFIX
       
         
 
