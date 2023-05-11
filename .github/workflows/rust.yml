@@ -18,7 +18,7 @@ jobs:
     runs-on: windows-2022
     env:
       toolchain-version: 1.67.0
-      llvm-version: 15.0.6
+      llvm-version: 14.0.6
     steps:
 
       - uses: actions/checkout@v3
@@ -35,9 +35,9 @@ jobs:
           directory: "./llvm"
       
       - name: Check LLVM
-        run: dir $env:LLVM_SYS_150_PREFIX
+        run: dir $env:LLVM_SYS_140_PREFIX
       - name: Check LLVM_SYS
-        run: echo $env:LLVM_SYS_150_PREFIX
+        run: echo $env:LLVM_SYS_140_PREFIX
       
         
 
