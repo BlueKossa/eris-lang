@@ -38,6 +38,8 @@ jobs:
       
       - name: Check LLVM
         run: dir llvm
+      - name: Check LLVM_SYS
+        run: echo %LLVM_SYS_150_PREFIX%
         
 
       - name: Release Build
