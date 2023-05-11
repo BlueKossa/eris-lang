@@ -5,8 +5,8 @@ use inkwell::{
     context::Context,
     module::Module,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
-    types::{AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
-    values::{BasicMetadataValueEnum, BasicValueEnum},
+    types::{StructType, AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType},
+    values::{BasicMetadataValueEnum, BasicValueEnum, PointerValue},
     AddressSpace, OptimizationLevel,
 };
 
@@ -180,6 +180,28 @@ impl<'a> CodeGenVisitor<'a> {
         command.arg(path).arg("-o").arg("a.out");
         let r = command.output().unwrap();
     }
+    // If windows
+    #[cfg(target_os = "windows")]
+    pub fn build_load<T: BasicType<'a>>(&mut self, ty: T, ptr: PointerValue<'a>, name: &'a str) -> BasicValueEnum<'a> {
+        self.builder.build_load(ptr, name)
+    }
+    // If not windows
+    #[cfg(not(target_os = "windows"))]
+    pub fn build_load<T: BasicType<'a>>(&mut self, ty: T, ptr: PointerValue<'a>, name: &'a str) -> BasicValueEnum<'a> {
+        self.builder.build_load(ty, ptr, name)
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn build_struct_gep<T: BasicType<'a>>(&mut self, struct_ty: T, ptr: PointerValue<'a>, index: u32, name: &'a str) -> PointerValue<'a> {
+        self.builder.build_struct_gep(ptr, index, name)
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn build_struct_gep<T: BasicType<'a>>(&mut self, struct_ty: T, ptr: PointerValue<'a>, index: u32, name: &'a str) -> Result<PointerValue<'a>, ()> {
+
+
+        self.builder.build_struct_gep(struct_ty, ptr, index, name)
+    }
 }
 
 pub struct CodeGenResult<'a> {
@@ -227,7 +249,9 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         };
         if let BasicValueEnum::PointerValue(ptr) = value {
             if !lty.is_pointer_type() {
-                value = self.builder.build_load(lty, ptr, "load");
+                // If windows
+                value = self.build_load(lty, ptr, "load");
+
             }
         }
 
@@ -246,10 +270,10 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let mut lhs_val = lhs.value;
                 let mut rhs_val = rhs.value;
                 if let BasicValueEnum::PointerValue(ptr) = lhs_val {
-                    lhs_val = self.builder.build_load(lhs.ty.unwrap(), ptr, "load");
+                    lhs_val = self.build_load(lhs.ty.unwrap(), ptr, "load");
                 }
                 if let BasicValueEnum::PointerValue(ptr) = rhs_val {
-                    rhs_val = self.builder.build_load(rhs.ty.unwrap(), ptr, "load");
+                    rhs_val = self.build_load(rhs.ty.unwrap(), ptr, "load");
                 }
                 let ty = lhs.ty.unwrap();
                 let val: BasicValueEnum = match (lhs_val, rhs_val) {
@@ -346,7 +370,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let expr = self.traverse_expr(&mut expr.kind).unwrap();
                 let mut expr_val = expr.value;
                 if let BasicValueEnum::PointerValue(ptr) = expr_val {
-                    expr_val = self.builder.build_load(expr.ty.unwrap(), ptr, "load");
+                    expr_val = self.build_load(expr.ty.unwrap(), ptr, "load");
                 }
                 let ty = expr.ty.unwrap();
                 let val: BasicValueEnum = match expr_val {
@@ -439,7 +463,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let array_type = elem_ty.array_type(len);
                 let array_alloc = self.builder.build_alloca(array_type, "array");
                 let array_val = self
-                    .builder
+                    
                     .build_load(array_type, array_alloc, "array_load")
                     .into_array_value();
                 println!("Loading Elements");
@@ -447,7 +471,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     let v = self.traverse_expr(&mut expr.kind).unwrap();
                     let mut val = v.value;
                     if let BasicValueEnum::PointerValue(ptr) = val {
-                        val = self.builder.build_load(
+                        val = self.build_load(
                             val.get_type().into_pointer_type(),
                             ptr,
                             "load",
@@ -469,14 +493,13 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     let v = self.traverse_expr(&mut field.kind).unwrap();
                     let mut val = v.value;
                     if let BasicValueEnum::PointerValue(ptr) = val {
-                        val = self.builder.build_load(
+                        val = self.build_load(
                             val.get_type().into_pointer_type(),
                             ptr,
                             "load",
                         );
                     }
                     let field_ptr = self
-                        .builder
                         .build_struct_gep(struct_ty, struct_val, i as u32, "field")
                         .unwrap();
                     self.builder.build_store(field_ptr, val);
@@ -502,7 +525,6 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let field_index = fields.get(field).unwrap();
                 let field_type = ty.get_field_type_at_index(*field_index as u32).unwrap();
                 let field_ptr = self
-                    .builder
                     .build_struct_gep(
                         struct_ty.into_struct_type(),
                         struct_ptr,
@@ -522,12 +544,12 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let rhs = self.traverse_expr(&mut rhs.kind).unwrap();
                 let mut rhs_val = rhs.value;
                 if let BasicValueEnum::PointerValue(ptr) = rhs_val {
-                    rhs_val = self.builder.build_load(rhs.ty.unwrap(), ptr, "load");
+                    rhs_val = self.build_load(rhs.ty.unwrap(), ptr, "load");
                 }
                 let lhs = self.traverse_expr(&mut lhs.kind).unwrap();
                 let mut lhs_val = lhs.value;
                 if let BasicValueEnum::PointerValue(ptr) = lhs_val {
-                    lhs_val = self.builder.build_load(lhs.ty.unwrap(), ptr, "load");
+                    lhs_val = self.build_load(lhs.ty.unwrap(), ptr, "load");
                 }
                 self.builder
                     .build_store(lhs_val.into_pointer_value(), rhs_val);
@@ -542,7 +564,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                             let res = self.traverse_expr(&mut param.kind).unwrap();
                             let (val, ty) = (res.value, res.ty.unwrap());
                             if let BasicValueEnum::PointerValue(ptr) = val {
-                                self.builder.build_load(ty, ptr, "load")
+                                self.build_load(ty, ptr, "load")
                             } else {
                                 val
                             }
@@ -575,7 +597,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     let expr = self.traverse_expr(&mut expr.kind).unwrap();
                     let mut expr_val = expr.value;
                     if let BasicValueEnum::PointerValue(ptr) = expr_val {
-                        expr_val = self.builder.build_load(expr.ty.unwrap(), ptr, "loadret");
+                        expr_val = self.build_load(expr.ty.unwrap(), ptr, "loadret");
                     }
                     self.builder.build_return(Some(&expr_val));
                 } else {
