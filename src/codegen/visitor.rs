@@ -192,7 +192,7 @@ impl<'a> CodeGenVisitor<'a> {
     }
 
     #[cfg(target_os = "windows")]
-    pub fn build_struct_gep<T: BasicType<'a>>(&mut self, struct_ty: T, ptr: PointerValue<'a>, index: u32, name: &'a str) -> PointerValue<'a> {
+    pub fn build_struct_gep<T: BasicType<'a>>(&mut self, struct_ty: T, ptr: PointerValue<'a>, index: u32, name: &'a str) -> Result<PointerValue<'a>, ()> {
         self.builder.build_struct_gep(ptr, index, name)
     }
 
