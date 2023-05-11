@@ -153,7 +153,7 @@ impl<'a> CodeGenVisitor<'a> {
     pub fn dump(&self) {
         self.module.print_to_stderr();
     }
-
+    #[cfg(target_os = "linux")]
     pub fn generate_machine_code(&self, path: &str) {
         Target::initialize_all(&InitializationConfig::default());
         let target_triple = TargetMachine::get_default_triple();
@@ -180,6 +180,36 @@ impl<'a> CodeGenVisitor<'a> {
         command.arg(path).arg("-o").arg("a.out");
         let r = command.output().unwrap();
     }
+    
+    #[cfg(target_os = "windows")]
+    pub fn generate_machine_code(&self, path: &str) {
+        Target::initialize_all(&InitializationConfig::default());
+        let target_triple = TargetMachine::get_default_triple();
+        let target = Target::from_triple(&target_triple).unwrap();
+        let reloc_model = RelocMode::PIC;
+        let code_model = CodeModel::Default;
+        let opt_level = OptimizationLevel::Aggressive;
+        let target_machine = target
+            .create_target_machine(
+                &target_triple,
+                "generic",
+                "",
+                opt_level,
+                reloc_model,
+                code_model,
+            )
+            .unwrap();
+        let file_type = FileType::Object;
+        target_machine
+            .write_to_file(&self.module, file_type, Path::new(path))
+            .unwrap();
+
+        let mut command = Command::new("gcc");
+        command.arg(path).arg("-o").arg("a.exe");
+        let r = command.output().unwrap();
+    }
+
+
     // If windows
     #[cfg(target_os = "windows")]
     pub fn build_load<T: BasicType<'a>>(&mut self, ty: T, ptr: PointerValue<'a>, name: &'a str) -> BasicValueEnum<'a> {
