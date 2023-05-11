@@ -29,7 +29,7 @@ jobs:
           toolchain: ${{ env.toolchain-version }}
 
       - name: Install LLVM
-        uses: ghaith/install-llvm-action@latest
+        uses: KyleMayes/install-llvm-action@v1
         with:
           version: ${{ env.llvm-version }}
           directory: "./llvm"
