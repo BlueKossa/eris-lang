@@ -33,22 +33,18 @@ jobs:
         with:
           version: ${{ env.llvm-version }}
           directory: "./llvm"
-      
-      - name: Check LLVM
-        run: dir $env:LLVM_SYS_140_PREFIX
-      - name: Check LLVM_SYS
-        run: echo $env:LLVM_SYS_140_PREFIX
-      
-        
 
       - name: Release Build
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release
+
+      - name: Rename file
+        run: mv target/release/eris-lang.exe ./eris.exe
+        
       
- 
       - uses: actions/upload-artifact@master
         with:
           name: eris.exe
-          path: target/release/eris-lang.exe
+          path: eris.exe
