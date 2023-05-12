@@ -411,7 +411,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let expr = self.traverse_expr(&mut expr.kind).unwrap();
                 let mut expr_val = expr.value;
                 if let BasicValueEnum::PointerValue(ptr) = expr_val {
-                    expr_val = self.builder.build_load( ptr, "load");
+                    expr_val = self.builder.build_load(ptr, "load");
                 }
                 let ty = expr.ty.unwrap();
                 let val: BasicValueEnum = match expr_val {
@@ -505,7 +505,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let array_alloc = self.builder.build_alloca(array_type, "array");
                 let array_val = self
                     .builder
-                    .build_load( array_alloc, "array_load")
+                    .build_load(array_alloc, "array_load")
                     .into_array_value();
                 println!("Loading Elements");
                 for (i, expr) in exprs.iter_mut().enumerate() {
@@ -560,11 +560,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let field_type = ty.get_field_type_at_index(*field_index as u32).unwrap();
                 let field_ptr = self
                     .builder
-                    .build_struct_gep(
-                        struct_ptr,
-                        *field_index as u32,
-                        "fieldaccess",
-                    )
+                    .build_struct_gep(struct_ptr, *field_index as u32, "fieldaccess")
                     .unwrap();
                 return Some(CodeGenResult {
                     value: field_ptr.into(),

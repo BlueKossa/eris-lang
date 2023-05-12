@@ -160,13 +160,12 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     }
                 }
                 ExprKind::Array(array).into()
-
             }
             _ => {
                 println!("Unexpected token: {:?}", self.last_token);
                 return Err(ParseError {
                     kind: ParseErrorKind::NotAnExpression(left_token),
-                })
+                });
             }
         };
 

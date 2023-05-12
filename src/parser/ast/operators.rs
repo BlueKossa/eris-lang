@@ -1,6 +1,5 @@
-use crate::lexer::token::Token;
 use crate::lexer::symbol::Symbol::*;
-
+use crate::lexer::token::Token;
 
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
@@ -98,9 +97,7 @@ impl<'a> TryFrom<Token<'a>> for BinaryOp {
 
     fn try_from(value: Token<'a>) -> Result<Self, Self::Error> {
         return match value {
-            Token::Symbol(Plus) => {
-                Ok(BinaryOp::Add)
-            },
+            Token::Symbol(Plus) => Ok(BinaryOp::Add),
             Token::Symbol(Minus) => Ok(BinaryOp::Subtract),
             Token::Symbol(Asterisk) => Ok(BinaryOp::Multiply),
             Token::Symbol(Slash) => Ok(BinaryOp::Divide),
@@ -122,7 +119,4 @@ impl<'a> TryFrom<Token<'a>> for BinaryOp {
             _ => Err(()),
         };
     }
-
-    
-
 }

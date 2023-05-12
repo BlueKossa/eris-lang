@@ -48,12 +48,10 @@ pub enum Symbol {
     PipePipe,
 
     ColonColon,
-
 }
 
 impl FromStr for Symbol {
     type Err = String;
-
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {

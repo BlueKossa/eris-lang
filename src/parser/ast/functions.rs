@@ -1,6 +1,5 @@
-use super::types::Type;
 use super::blocks::Block;
-
+use super::types::Type;
 
 #[derive(Debug, Clone)]
 pub struct FnSig<'a> {
@@ -8,12 +7,9 @@ pub struct FnSig<'a> {
     pub args: Vec<(&'a str, Type<'a>)>,
 }
 
-
 #[derive(Debug, Clone)]
 pub struct FnDecl<'a> {
     pub name: &'a str,
     pub sig: FnSig<'a>,
     pub body: Block<'a>,
 }
-
-

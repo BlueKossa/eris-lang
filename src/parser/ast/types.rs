@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct Type<'a> {
     pub kind: Box<TypeKind<'a>>,
@@ -27,7 +26,6 @@ pub enum TypeKind<'a> {
     Struct(&'a str),
 }
 
-
 impl<'a> Type<'a> {
     pub fn from_str(name: &'a str) -> Self {
         match name {
@@ -49,14 +47,15 @@ impl<'a> Type<'a> {
             "char" => TypeKind::Char,
             "str" => TypeKind::Str,
             _ => TypeKind::Struct(name),
-        }.into()
+        }
+        .into()
     }
 }
 
 impl<'a> Into<Type<'a>> for TypeKind<'a> {
     fn into(self) -> Type<'a> {
-        Type { kind: Box::new(self) }
+        Type {
+            kind: Box::new(self),
+        }
     }
 }
-
-

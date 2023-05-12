@@ -1,4 +1,7 @@
-use crate::parser::ast::{blocks::Block, statements::Statement, locals::Local, expressions::ExprKind, functions::FnDecl, items::Item};
+use crate::parser::ast::{
+    blocks::Block, expressions::ExprKind, functions::FnDecl, items::Item, locals::Local,
+    statements::Statement,
+};
 
 pub trait MutVisitorPattern<'a> {
     type ReturnType;

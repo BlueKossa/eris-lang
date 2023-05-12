@@ -1,8 +1,8 @@
+mod codegen;
 mod lexer;
 mod parser;
-mod codegen;
-mod visitor;
 mod semantic;
+mod visitor;
 
 use inkwell::context::Context;
 use lexer::lexer::LexResult;
@@ -11,12 +11,9 @@ use parser::ast::blocks::Block;
 use parser::ast::statements::Statement;
 use semantic::visitor::SemanticVisitor;
 
+use crate::codegen::visitor::CodeGenVisitor;
 use crate::lexer::lexer::Lexer;
 use crate::parser::parser::Parser;
-use crate::codegen::visitor::CodeGenVisitor;
-
-
-use codegen::codegen::test;
 
 fn main() {
     let path = std::env::args().nth(1).unwrap();
@@ -51,4 +48,3 @@ fn main() {
     codegen_visitor.dump();
     codegen_visitor.generate_machine_code("tst.o");
 }
-

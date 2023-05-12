@@ -5,11 +5,13 @@ pub struct ChainMap<K, V> {
     maps: Vec<HashMap<K, V>>,
 }
 
-impl<K, V> ChainMap<K, V> where K: std::cmp::Eq + std::hash::Hash {
+impl<K, V> ChainMap<K, V>
+where
+    K: std::cmp::Eq + std::hash::Hash,
+{
     pub fn new() -> Self {
         Self { maps: Vec::new() }
     }
-
 
     pub fn pop_map(&mut self) -> Option<HashMap<K, V>> {
         self.maps.pop()

@@ -1,6 +1,5 @@
 use super::types::Type;
 
-
 #[derive(Debug, Clone)]
 pub struct Field<'a> {
     pub name: &'a str,

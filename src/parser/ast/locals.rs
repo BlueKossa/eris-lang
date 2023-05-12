@@ -1,5 +1,5 @@
-use super::types::Type;
 use super::expressions::Expr;
+use super::types::Type;
 
 #[derive(Debug, Clone)]
 pub struct Local<'a> {

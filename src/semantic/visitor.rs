@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use crate::parser::ast::expressions::ExprKind;
 use crate::parser::ast::functions::FnDecl;
 use crate::parser::ast::items::Item;
-use crate::parser::ast::items::ItemKind::{Function, Struct, Constant};
+use crate::parser::ast::items::ItemKind::{Constant, Function, Struct};
 use crate::parser::ast::locals::Local;
 use crate::parser::ast::statements::Statement;
 use crate::parser::ast::types::{Type, TypeKind};
-use crate::{visitor::visitor_pattern::MutVisitorPattern, parser::ast::blocks::Block};
 use crate::visitor::chainmap::ChainMap;
+use crate::{parser::ast::blocks::Block, visitor::visitor_pattern::MutVisitorPattern};
 
 pub struct SemanticVisitor<'a> {
     values: ChainMap<&'a str, Type<'a>>,
@@ -20,7 +20,6 @@ pub struct SemanticVisitor<'a> {
 fn type_mismatch<'a>(t1: &Type<'a>, t2: &Type<'a>) {
     panic!("Type mismatch: {:?} != {:?}", t1, t2);
 }
-
 
 impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
     type ReturnType = Option<Type<'a>>;
@@ -55,11 +54,12 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
         } else if let (Some(t), None) = (ty, &local.ty) {
             local.ty = Some(t);
         }
-        self.values.insert(local.ident, local.ty.as_ref().unwrap().to_owned());
+        self.values
+            .insert(local.ident, local.ty.as_ref().unwrap().to_owned());
         None
     }
 
-    fn traverse_expr(&mut self, expr: &mut ExprKind<'a> ) -> Self::ReturnType {
+    fn traverse_expr(&mut self, expr: &mut ExprKind<'a>) -> Self::ReturnType {
         match expr {
             ExprKind::Binary(_op, lhs, rhs) => {
                 let ty1 = self.traverse_expr(&mut lhs.kind);
@@ -71,12 +71,8 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 }
                 ty1
             }
-            ExprKind::Unary(_op, expr) => {
-                self.traverse_expr(&mut expr.kind)
-            }
-            ExprKind::Literal(lit) => {
-                Some(lit.to_ty())
-            }
+            ExprKind::Unary(_op, expr) => self.traverse_expr(&mut expr.kind),
+            ExprKind::Literal(lit) => Some(lit.to_ty()),
             ExprKind::Array(a) => {
                 let ty = self.traverse_expr(&mut a[0].kind).unwrap();
                 for expr in a.iter_mut() {
@@ -134,21 +130,20 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 }
                 Some(fn_type.to_owned())
             }
-            ExprKind::Var(v) => {
-                Some(self.values.get(v).unwrap().to_owned())
-            },
+            ExprKind::Var(v) => Some(self.values.get(v).unwrap().to_owned()),
             ExprKind::Return(_) => None,
-
         }
     }
 
     fn traverse_item(&mut self, item: &mut Item<'a>) -> Self::ReturnType {
         match &mut item.kind {
-            Function(decl) => {
-                self.traverse_function(decl)
-            },
+            Function(decl) => self.traverse_function(decl),
             Struct(s) => {
-                let fields = s.fields.iter().map(|f| (f.name, f.ty.to_owned())).collect::<Vec<_>>();
+                let fields = s
+                    .fields
+                    .iter()
+                    .map(|f| (f.name, f.ty.to_owned()))
+                    .collect::<Vec<_>>();
                 self.structs.insert(s.name, Box::new(fields));
                 None
             }
@@ -158,8 +153,13 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
 
     fn traverse_function(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
         let sig = &mut function.sig;
-        let args = sig.args.iter().map(|(_name, ty)| ty.to_owned()).collect::<Vec<_>>();
-        self.fn_decls.insert(function.name, Box::new((args, sig.ret.to_owned())));
+        let args = sig
+            .args
+            .iter()
+            .map(|(_name, ty)| ty.to_owned())
+            .collect::<Vec<_>>();
+        self.fn_decls
+            .insert(function.name, Box::new((args, sig.ret.to_owned())));
         for (name, ty) in sig.args.iter() {
             self.values.insert(name, ty.to_owned());
         }
@@ -168,7 +168,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
     }
 }
 
-impl <'a> SemanticVisitor<'a> {
+impl<'a> SemanticVisitor<'a> {
     pub fn new() -> Self {
         Self {
             values: ChainMap::new(),
@@ -182,4 +182,3 @@ impl <'a> SemanticVisitor<'a> {
         drop(entry);
     }
 }
-

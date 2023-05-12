@@ -1,5 +1,3 @@
-
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Number<'a> {
     Integer(&'a str),
@@ -12,6 +10,3 @@ pub enum Literal<'a> {
     Number(Number<'a>),
     Boolean(bool),
 }
-
-
-

@@ -1,6 +1,5 @@
-use super::symbol::Symbol;
 use super::literal::Literal;
-
+use super::symbol::Symbol;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Token<'a> {

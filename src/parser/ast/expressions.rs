@@ -1,6 +1,6 @@
-use super::operators::{BinaryOp, UnaryOp};
-use super::literals::Literal;
 use super::blocks::Block;
+use super::literals::Literal;
+use super::operators::{BinaryOp, UnaryOp};
 
 #[derive(Debug, Clone)]
 pub enum ExprKind<'a> {
@@ -19,7 +19,7 @@ pub enum ExprKind<'a> {
     Return(Option<Expr<'a>>),
 }
 
-impl <'a> Into<Expr<'a>> for ExprKind<'a> {
+impl<'a> Into<Expr<'a>> for ExprKind<'a> {
     fn into(self) -> Expr<'a> {
         Expr {
             kind: Box::new(self),
@@ -31,7 +31,3 @@ impl <'a> Into<Expr<'a>> for ExprKind<'a> {
 pub struct Expr<'a> {
     pub kind: Box<ExprKind<'a>>,
 }
-
-
-
-
