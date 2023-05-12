@@ -6,11 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
-# Dependencies for windows platform ONLY
-[target.'cfg(windows)'.dependencies]
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"] }
 
 # Dependencies for linux platform ONLY
-[target.'cfg(unix)'.dependencies]
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm15-0"] }
+#[target.'cfg(unix)'.dependencies]
+#inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm15-0"] }
+#
+#Dependencies for windows platform ONLY
+#[target.'cfg(windows)'.dependencies]
+#inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"] }
+
