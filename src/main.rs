@@ -46,5 +46,6 @@ fn main() {
     codegen_visitor.create_clib_functions();
     codegen_visitor.run(&mut block);
     codegen_visitor.dump();
+    codegen_visitor.dump_file("tst.ll");
     codegen_visitor.generate_machine_code("tst.o");
 }

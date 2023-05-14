@@ -105,8 +105,16 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 }
             }
             ExprKind::MethodCall(_, _, _) => todo!(),
-            ExprKind::If(_, _) => todo!(),
-            ExprKind::While(_, _) => todo!(),
+            ExprKind::If(_cond, body) => {
+                //TODO
+                self.traverse_block(body);
+                None
+            }
+            ExprKind::Loop(_cond, body) => {
+                //TODO: Check if loop is infinite
+                self.traverse_block(body);
+                None
+            }
             ExprKind::Assign(var, rhs) => {
                 let ty1 = self.traverse_expr(&mut var.kind).unwrap();
                 let ty2 = self.traverse_expr(&mut rhs.kind).unwrap();
@@ -131,6 +139,10 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 Some(fn_type.to_owned())
             }
             ExprKind::Var(v) => Some(self.values.get(v).unwrap().to_owned()),
+            ExprKind::Break => {
+                //TODO: Check if break is inside a loop 
+                None
+            }
             ExprKind::Return(_) => None,
         }
     }

@@ -9,7 +9,7 @@ use inkwell::{
         AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, StructType,
     },
     values::{BasicMetadataValueEnum, BasicValueEnum, PointerValue},
-    AddressSpace, OptimizationLevel,
+    AddressSpace, OptimizationLevel, basic_block::BasicBlock,
 };
 
 use crate::{
@@ -33,6 +33,9 @@ pub struct CodeGenVisitor<'a> {
     pub module: Module<'a>,
     values: ChainMap<&'a str, (BasicValueEnum<'a>, BasicTypeEnum<'a>)>,
     structs: HashMap<&'a str, HashMap<&'a str, usize>>,
+
+    current_loop_exit: Option<BasicBlock<'a>>,
+    current_loop_cond: Option<BasicBlock<'a>>,
 }
 
 impl<'a> CodeGenVisitor<'a> {
@@ -47,6 +50,9 @@ impl<'a> CodeGenVisitor<'a> {
             module,
             values,
             structs,
+
+            current_loop_exit: None,
+            current_loop_cond: None,
         }
     }
 
@@ -157,6 +163,13 @@ impl<'a> CodeGenVisitor<'a> {
     pub fn dump(&self) {
         self.module.print_to_stderr();
     }
+
+    pub fn dump_file(&self, path: &str) {
+        self.module.print_to_file(path).unwrap();
+    }
+
+
+
     #[cfg(target_os = "linux")]
     pub fn generate_machine_code(&self, path: &str) {
         Target::initialize_all(&InitializationConfig::default());
@@ -185,33 +198,33 @@ impl<'a> CodeGenVisitor<'a> {
         let r = command.output().unwrap();
     }
 
-    #[cfg(target_os = "windows")]
-    pub fn generate_machine_code(&self, path: &str) {
-        Target::initialize_all(&InitializationConfig::default());
-        let target_triple = TargetMachine::get_default_triple();
-        let target = Target::from_triple(&target_triple).unwrap();
-        let reloc_model = RelocMode::PIC;
-        let code_model = CodeModel::Default;
-        let opt_level = OptimizationLevel::Aggressive;
-        let target_machine = target
-            .create_target_machine(
-                &target_triple,
-                "generic",
-                "",
-                opt_level,
-                reloc_model,
-                code_model,
-            )
-            .unwrap();
-        let file_type = FileType::Object;
-        target_machine
-            .write_to_file(&self.module, file_type, Path::new(path))
-            .unwrap();
+    //#[cfg(target_os = "windows")]
+    //pub fn generate_machine_code(&self, path: &str) {
+    //    Target::initialize_all(&InitializationConfig::default());
+    //    let target_triple = TargetMachine::get_default_triple();
+    //    let target = Target::from_triple(&target_triple).unwrap();
+    //    let reloc_model = RelocMode::PIC;
+    //    let code_model = CodeModel::Default;
+    //    let opt_level = OptimizationLevel::Aggressive;
+    //    let target_machine = target
+    //        .create_target_machine(
+    //            &target_triple,
+    //            "generic",
+    //            "",
+    //            opt_level,
+    //            reloc_model,
+    //            code_model,
+    //        )
+    //        .unwrap();
+    //    let file_type = FileType::Object;
+    //    target_machine
+    //        .write_to_file(&self.module, file_type, Path::new(path))
+    //        .unwrap();
 
-        let mut command = Command::new("gcc");
-        command.arg(path).arg("-o").arg("a.exe");
-        let r = command.output().unwrap();
-    }
+    //    let mut command = Command::new("gcc");
+    //    command.arg(path).arg("-o").arg("a.exe");
+    //    let r = command.output().unwrap();
+    //}
 
     // LLVM 14/15 cross-compatibility, not required atm since I changed everything to llvm 14
 
@@ -282,6 +295,8 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
     }
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
+        println!("local: {:?}", local.ident);
+        println!("local: {:?}", local.ty);
         let ty = self.to_llvm_type(&local.ty.as_ref().unwrap());
         let (mut value, lty) = match local.value {
             Some(ref mut expr) => {
@@ -296,7 +311,20 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             }
         }
 
+        let current_block = self.builder.get_insert_block().unwrap();
+
+        let entry_block = self.builder.get_insert_block().unwrap().get_parent().unwrap().get_first_basic_block().unwrap();
+
+        if let Some(instruction) = entry_block.get_first_instruction() {
+            self.builder.position_before(&instruction);
+        } else {
+            self.builder.position_at_end(entry_block);
+        }
+
+
         let alloca = self.builder.build_alloca(ty, local.ident);
+
+        self.builder.position_at_end(current_block);
 
         self.builder.build_store(alloca, value);
         self.values.insert(local.ident, (alloca.into(), ty));
@@ -568,8 +596,49 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 });
             }
             ExprKind::MethodCall(_, _, _) => todo!(),
-            ExprKind::If(_, _) => todo!(),
-            ExprKind::While(_, _) => todo!(),
+            ExprKind::If(cond, body) => {
+                let cond = self.traverse_expr(&mut cond.kind).unwrap();
+                let cond_val = cond.value.into_int_value();
+                let func = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let then_block = self.context.append_basic_block(func, "then");
+                let else_block = self.context.append_basic_block(func, "else");
+                let end_block = self.context.append_basic_block(func, "end");
+                self.builder.build_conditional_branch(cond_val, then_block, else_block);
+                self.builder.position_at_end(then_block);
+                self.traverse_block(body);
+                self.builder.build_unconditional_branch(end_block);
+                self.builder.position_at_end(else_block);
+                self.builder.build_unconditional_branch(end_block);
+                self.builder.position_at_end(end_block);
+                return None;
+            }
+            ExprKind::Loop(cond, body) => {
+                let start_block = self.builder.get_insert_block().unwrap();
+                let func = start_block.get_parent().unwrap();
+                let cond_block = self.context.append_basic_block(func, "loop_cond");
+                let body_block = self.context.append_basic_block(func, "loop_body");
+                let end_block = self.context.append_basic_block(func, "loop_end");
+                self.current_loop_exit = Some(end_block);
+                self.current_loop_cond = Some(cond_block);
+                
+                // Condition
+                self.builder.build_unconditional_branch(cond_block);
+                self.builder.position_at_end(cond_block);
+                let cond = self.traverse_expr(&mut cond.kind).unwrap();
+                let cond_val = cond.value.into_int_value();
+
+                // Loop
+                self.builder
+                    .build_conditional_branch(cond_val, body_block, end_block);
+                self.builder.position_at_end(body_block);
+                self.traverse_block(body);
+
+                // Exit
+                self.builder.build_unconditional_branch(cond_block);
+                self.builder.position_at_end(end_block);
+
+                None
+            }
             ExprKind::Assign(lhs, rhs) => {
                 let rhs = self.traverse_expr(&mut rhs.kind).unwrap();
                 let mut rhs_val = rhs.value;
@@ -577,12 +646,9 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     rhs_val = self.builder.build_load(ptr, "load");
                 }
                 let lhs = self.traverse_expr(&mut lhs.kind).unwrap();
-                let mut lhs_val = lhs.value;
-                if let BasicValueEnum::PointerValue(ptr) = lhs_val {
-                    lhs_val = self.builder.build_load(ptr, "load");
-                }
+                let mut lhs_ptr = lhs.value.into_pointer_value();
                 self.builder
-                    .build_store(lhs_val.into_pointer_value(), rhs_val);
+                    .build_store(lhs_ptr, rhs_val);
                 return None;
             }
             ExprKind::Call(ident, params) => {
@@ -623,6 +689,14 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     ty: Some(val.1),
                 });
             }
+            ExprKind::Break => {
+                let insert_block = self.builder.get_insert_block().unwrap();
+                let end_block = self.current_loop_exit.unwrap();
+                self.builder.build_unconditional_branch(end_block);
+                let buffer_block = self.context.append_basic_block(insert_block.get_parent().unwrap(), "buffer");
+                self.builder.position_at_end(buffer_block);
+                return None;
+            }
             ExprKind::Return(expr) => {
                 if let Some(expr) = expr {
                     let expr = self.traverse_expr(&mut expr.kind).unwrap();
@@ -636,6 +710,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 }
                 return None;
             }
+
         }
     }
 

@@ -310,7 +310,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         let cond = self.parse_expression(0)?;
         println!("Body");
         let body = self.parse_block()?;
-        Ok(ExprKind::While(cond, body).into())
+        Ok(ExprKind::Loop(cond, body).into())
     }
 
     pub fn parse_identifier(&mut self) -> ParseResult<'a, Statement<'a>> {
@@ -332,6 +332,30 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     While => {
                         let while_loop = self.parse_while()?;
                         return Ok(Statement::Expression(while_loop));
+                    }
+                    Loop => {
+                        self.eat_token()?;
+                        let b = AstLiteral {
+                            kind: LiteralKind::Bool(true),
+                        };
+                        let cond = ExprKind::Literal(b).into();
+                        let loop_expr = self.parse_block()?;
+                        return Ok(Statement::Expression(ExprKind::Loop(cond, loop_expr).into()));
+                    }
+                    Break => {
+                        self.eat_token()?;
+                        return Ok(Statement::Expression(ExprKind::Break.into()));
+                    }
+                    If => {
+                        self.eat_token()?;
+                        let cond = self.parse_expression(0)?;
+                        let body = self.parse_block()?;
+                        return Ok(Statement::Expression(ExprKind::If(
+                            cond,
+                            body,
+                        )
+                        .into()));
+
                     }
                     _ => {
                         return Err(ParseError {

@@ -12,10 +12,11 @@ pub enum ExprKind<'a> {
     FieldAccess(Expr<'a>, &'a str),
     MethodCall(Expr<'a>, &'a str, Vec<Expr<'a>>),
     If(Expr<'a>, Block<'a>),
-    While(Expr<'a>, Block<'a>),
+    Loop(Expr<'a>, Block<'a>),
     Assign(Expr<'a>, Expr<'a>),
     Call(&'a str, Vec<Expr<'a>>),
     Var(&'a str),
+    Break,
     Return(Option<Expr<'a>>),
 }
 
