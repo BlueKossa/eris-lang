@@ -198,33 +198,33 @@ impl<'a> CodeGenVisitor<'a> {
         let r = command.output().unwrap();
     }
 
-    //#[cfg(target_os = "windows")]
-    //pub fn generate_machine_code(&self, path: &str) {
-    //    Target::initialize_all(&InitializationConfig::default());
-    //    let target_triple = TargetMachine::get_default_triple();
-    //    let target = Target::from_triple(&target_triple).unwrap();
-    //    let reloc_model = RelocMode::PIC;
-    //    let code_model = CodeModel::Default;
-    //    let opt_level = OptimizationLevel::Aggressive;
-    //    let target_machine = target
-    //        .create_target_machine(
-    //            &target_triple,
-    //            "generic",
-    //            "",
-    //            opt_level,
-    //            reloc_model,
-    //            code_model,
-    //        )
-    //        .unwrap();
-    //    let file_type = FileType::Object;
-    //    target_machine
-    //        .write_to_file(&self.module, file_type, Path::new(path))
-    //        .unwrap();
+    #[cfg(target_os = "windows")]
+    pub fn generate_machine_code(&self, path: &str) {
+        Target::initialize_all(&InitializationConfig::default());
+        let target_triple = TargetMachine::get_default_triple();
+        let target = Target::from_triple(&target_triple).unwrap();
+        let reloc_model = RelocMode::PIC;
+        let code_model = CodeModel::Default;
+        let opt_level = OptimizationLevel::Aggressive;
+        let target_machine = target
+            .create_target_machine(
+                &target_triple,
+                "generic",
+                "",
+                opt_level,
+                reloc_model,
+                code_model,
+            )
+            .unwrap();
+        let file_type = FileType::Object;
+        target_machine
+            .write_to_file(&self.module, file_type, Path::new(path))
+            .unwrap();
 
-    //    let mut command = Command::new("gcc");
-    //    command.arg(path).arg("-o").arg("a.exe");
-    //    let r = command.output().unwrap();
-    //}
+        let mut command = Command::new("gcc");
+        command.arg(path).arg("-o").arg("a.exe");
+        let r = command.output().unwrap();
+    }
 
     // LLVM 14/15 cross-compatibility, not required atm since I changed everything to llvm 14
 
