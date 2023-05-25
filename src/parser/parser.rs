@@ -195,6 +195,18 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 self.eat_token()?;
                 lhs = ExprKind::FieldAccess(lhs, field).into();
                 continue;
+            } else if let Token::Symbol(BracketOpen) = right_token {
+                self.eat_token()?;
+                let index = self.parse_expression(0)?;
+                if let Token::Symbol(BracketClose) = self.peek_token()? {
+                    self.eat_token()?;
+                    lhs = ExprKind::ArrayAccess(lhs, index).into();
+                    continue;
+                } else {
+                    return Err(ParseError {
+                        kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+                    });
+                }
             }
 
             if let (Token::Symbol(ParenOpen), Token::Identifier(_)) = (right_token, left_token) {

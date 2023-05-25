@@ -104,6 +104,14 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                     panic!("Expected struct type, found {:?}", struct_ty);
                 }
             }
+            ExprKind::ArrayAccess(array, _index) => {
+                //TODO
+                if let TypeKind::Array(ty, _) = *self.traverse_expr(&mut array.kind).unwrap().kind {
+                    Some(ty.into())
+                } else {
+                    panic!("Expected array type");
+                }
+            }
             ExprKind::MethodCall(_, _, _) => todo!(),
             ExprKind::If(_cond, body) => {
                 //TODO

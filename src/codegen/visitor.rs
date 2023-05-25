@@ -295,22 +295,8 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
     }
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
-        println!("local: {:?}", local.ident);
-        println!("local: {:?}", local.ty);
-        let ty = self.to_llvm_type(&local.ty.as_ref().unwrap());
-        let (mut value, lty) = match local.value {
-            Some(ref mut expr) => {
-                let res = self.traverse_expr(&mut expr.kind).unwrap();
-                (res.value, res.ty.unwrap())
-            }
-            None => todo!(),
-        };
-        if let BasicValueEnum::PointerValue(ptr) = value {
-            if !lty.is_pointer_type() {
-                value = self.builder.build_load(ptr, "load");
-            }
-        }
-
+        //println!("local: {:?}", local.ident);
+        //println!("local: {:?}", local.ty);
         let current_block = self.builder.get_insert_block().unwrap();
 
         let entry_block = self.builder.get_insert_block().unwrap().get_parent().unwrap().get_first_basic_block().unwrap();
@@ -320,13 +306,26 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         } else {
             self.builder.position_at_end(entry_block);
         }
-
-
-        let alloca = self.builder.build_alloca(ty, local.ident);
-
-        self.builder.position_at_end(current_block);
-
-        self.builder.build_store(alloca, value);
+        let ty = self.to_llvm_type(&local.ty.as_ref().unwrap());
+        let (value, lty) = match local.value {
+            Some(ref mut expr) => {
+                let res = self.traverse_expr(&mut expr.kind).unwrap();
+                (res.value, res.ty.unwrap())
+            }
+            None => todo!(),
+        };
+        let alloca = if let BasicValueEnum::PointerValue(ptr) = value {
+            if !lty.is_pointer_type() {
+                //value = self.builder.build_load(ptr, "load");
+            }
+            self.builder.position_at_end(current_block);
+            ptr
+        } else {
+            let alloca = self.builder.build_alloca(ty, "");
+            self.builder.position_at_end(current_block);
+            self.builder.build_store(alloca, value);
+            alloca
+        };
         self.values.insert(local.ident, (alloca.into(), ty));
         None
     }
@@ -531,22 +530,41 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let len = exprs.len() as u32;
                 let array_type = elem_ty.array_type(len);
                 let array_alloc = self.builder.build_alloca(array_type, "array");
-                let array_val = self
-                    .builder
-                    .build_load(array_alloc, "array_load")
-                    .into_array_value();
-                println!("Loading Elements");
+                //let array_val = self
+                //    .builder
+                //    .build_load(array_alloc, "array_load")
+                //    .into_array_value();
+                //println!("Loading Elements");
+                //for (i, expr) in exprs.iter_mut().enumerate() {
+                //    let v = self.traverse_expr(&mut expr.kind).unwrap();
+                //    let mut val = v.value;
+                //    if let BasicValueEnum::PointerValue(ptr) = val {
+                //        val = self.builder.build_load(ptr, "load");
+                //    }
+                //    self.builder
+                //        .build_insert_value(array_val, val, i as u32, "insert");
+                //}
                 for (i, expr) in exprs.iter_mut().enumerate() {
-                    let v = self.traverse_expr(&mut expr.kind).unwrap();
-                    let mut val = v.value;
+                    let e = self.traverse_expr(&mut expr.kind).unwrap();
+                    let mut val = e.value;
                     if let BasicValueEnum::PointerValue(ptr) = val {
                         val = self.builder.build_load(ptr, "load");
                     }
-                    self.builder
-                        .build_insert_value(array_val, val, i as u32, "insert");
+                    unsafe {
+                        let ptr = self
+                            .builder
+                            .build_in_bounds_gep(
+                                array_alloc,
+                                &[
+                                self.context.i32_type().const_int(0, false),
+                                self.context.i32_type().const_int(i as u64, false)],
+                                "ptr",
+                            );
+                        self.builder.build_store(ptr, val);
+                    }
                 }
                 return Some(CodeGenResult {
-                    value: array_val.into(),
+                    value: array_alloc.into(),
                     ty: Some(array_type.into()),
                 });
             }
@@ -594,6 +612,31 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     value: field_ptr.into(),
                     ty: Some(field_type),
                 });
+            }
+            ExprKind::ArrayAccess(array, index) => {
+                let array = self.traverse_expr(&mut array.kind).unwrap();
+                let array_val = array.value;
+                let array_ty = array.ty.unwrap();
+                let array_ptr = if let BasicValueEnum::PointerValue(ptr) = array_val {
+                    ptr
+                } else {
+                    self.builder.build_alloca(array_ty, "array")
+                };
+                let ty = array_ty.into_array_type();
+                let elem_ty = ty.get_element_type();
+                println!("elem_ty: {:?}", elem_ty);
+                let index = self.traverse_expr(&mut index.kind).unwrap();
+                let index_val = index.value.into_int_value();
+                unsafe {
+                    let elem_ptr = self
+                        .builder
+                        .build_in_bounds_gep(array_ptr, &[self.context.i32_type().const_int(0, false),
+                                             index_val], "arrayaccess");
+                    return Some(CodeGenResult {
+                        value: elem_ptr.into(),
+                        ty: Some(elem_ty),
+                    });
+                }
             }
             ExprKind::MethodCall(_, _, _) => todo!(),
             ExprKind::If(cond, body) => {

@@ -1,5 +1,6 @@
-
 main :: () : i32 {
-    monke := [3, 4];
+    a := [69, 420];
+    b := a[0];
+    printf("%d\n", b);
     return 0;
 }

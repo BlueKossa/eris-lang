@@ -10,6 +10,7 @@ pub enum ExprKind<'a> {
     Array(Vec<Expr<'a>>),
     StructInit(&'a str, Vec<Expr<'a>>),
     FieldAccess(Expr<'a>, &'a str),
+    ArrayAccess(Expr<'a>, Expr<'a>),
     MethodCall(Expr<'a>, &'a str, Vec<Expr<'a>>),
     If(Expr<'a>, Block<'a>),
     Loop(Expr<'a>, Block<'a>),
