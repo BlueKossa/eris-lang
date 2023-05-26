@@ -17,7 +17,7 @@ pub struct SemanticVisitor<'a> {
 }
 
 #[inline(always)]
-fn type_mismatch<'a>(t1: &Type<'a>, t2: &Type<'a>) {
+fn type_mismatch<'a>(t1: &TypeKind<'a>, t2: &TypeKind<'a>) {
     panic!("Type mismatch: {:?} != {:?}", t1, t2);
 }
 
@@ -48,9 +48,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             None
         };
         if let (Some(ty1), Some(ty2)) = (&ty, &local.ty) {
-            if ty1 != ty2 {
-                type_mismatch(&ty1, &ty2);
-            }
+            self.type_check(ty1, ty2);
         } else if let (Some(t), None) = (ty, &local.ty) {
             local.ty = Some(t);
         }
@@ -65,21 +63,21 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 let ty1 = self.traverse_expr(&mut lhs.kind);
                 let ty2 = self.traverse_expr(&mut rhs.kind);
                 if let (Some(ty1), Some(ty2)) = (ty1.to_owned(), ty2) {
-                    if ty1 != ty2 {
-                        type_mismatch(&ty1, &ty2)
-                    }
+                    self.type_check(&ty1, &ty2);
                 }
                 ty1
             }
             ExprKind::Unary(_op, expr) => self.traverse_expr(&mut expr.kind),
             ExprKind::Literal(lit) => Some(lit.to_ty()),
+            ExprKind::Ref(expr) => {
+                let ty = self.traverse_expr(&mut expr.kind).unwrap();
+                Some(TypeKind::Ref(ty).into())
+            }
             ExprKind::Array(a) => {
                 let ty = self.traverse_expr(&mut a[0].kind).unwrap();
                 for expr in a.iter_mut() {
                     let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
-                    if ty1 != ty {
-                        type_mismatch(&ty1, &ty);
-                    }
+                    self.type_check(&ty, &ty1);
                 }
                 Some(TypeKind::Array(ty, a.len()).into())
             }
@@ -88,9 +86,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 for (field, expr) in fields.iter_mut().enumerate() {
                     let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
                     let ty2 = &struct_ty.get(field).unwrap().1;
-                    if ty1 != *ty2 {
-                        type_mismatch(&ty1, &ty2);
-                    }
+                    self.type_check(&ty1, ty2);
                 }
                 Some(TypeKind::Struct(name).into())
             }
@@ -126,9 +122,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             ExprKind::Assign(var, rhs) => {
                 let ty1 = self.traverse_expr(&mut var.kind).unwrap();
                 let ty2 = self.traverse_expr(&mut rhs.kind).unwrap();
-                if ty1 != ty2 {
-                    type_mismatch(&ty1, &ty2);
-                }
+                self.type_check(&ty1, &ty2);
                 None
             }
             ExprKind::Call(func, params) => {
@@ -140,9 +134,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 for (i, expr) in params.iter_mut().enumerate() {
                     let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
                     let ty2 = param_types.get(i).unwrap();
-                    if &ty1 != ty2 {
-                        type_mismatch(&ty1, &ty2);
-                    }
+                    self.type_check(&ty1, ty2);
                 }
                 Some(fn_type.to_owned())
             }
@@ -200,5 +192,18 @@ impl<'a> SemanticVisitor<'a> {
     pub fn run(&mut self, entry: &mut Block<'a>) {
         self.traverse_block(entry);
         drop(entry);
+    }
+
+    fn type_check(&self, ty1: &Type, ty2: &Type) {
+        match (*ty1.kind.to_owned(), *ty2.kind.to_owned()) {
+            (TypeKind::Ref(ty1), TypeKind::Ref(ty2)) => self.type_check(&ty1, &ty2),
+            (TypeKind::Ref(ty1), _) => self.type_check(&ty1, &ty2),
+            (_, TypeKind::Ref(ty2)) => self.type_check(&ty1, &ty2),
+            (t1, t2) => {
+                if t1 != t2 {
+                    type_mismatch(&t1, &t2);
+                }
+            }
+        }
     }
 }
