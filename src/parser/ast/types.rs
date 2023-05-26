@@ -24,6 +24,7 @@ pub enum TypeKind<'a> {
     Str,
     Array(Type<'a>, usize),
     Struct(&'a str),
+    Ref(Type<'a>),
 }
 
 impl<'a> Type<'a> {
@@ -50,6 +51,11 @@ impl<'a> Type<'a> {
         }
         .into()
     }
+
+    pub fn ref_type(ty: Type<'a>) -> Self {
+        TypeKind::Ref(ty).into()
+    }
+
 }
 
 impl<'a> Into<Type<'a>> for TypeKind<'a> {

@@ -84,6 +84,10 @@ impl<'a> CodeGenVisitor<'a> {
             }
             // TODO: Fix this, void is not supposed to be an int
             TypeKind::Void => self.context.i8_type().into(),
+            TypeKind::Ref(ty) => {
+                let ty = self.to_llvm_type(&ty);
+                ty.ptr_type(AddressSpace::default()).into()
+            }
             _ => todo!(),
         }
     }
@@ -312,7 +316,10 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let res = self.traverse_expr(&mut expr.kind).unwrap();
                 (res.value, res.ty.unwrap())
             }
-            None => todo!(),
+            None => (
+                ty.const_zero(),
+                self.to_llvm_type(&local.ty.as_ref().unwrap()),
+            ),
         };
         let alloca = if let BasicValueEnum::PointerValue(ptr) = value {
             if !lty.is_pointer_type() {
@@ -446,6 +453,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                         let res = match op {
                             UnaryOp::Negate => self.builder.build_int_neg(a, "neg"),
                             UnaryOp::Not => self.builder.build_not(a, "not"),
+                            o => unimplemented!("{:?}", o),
                         };
                         res.into()
                     }
@@ -506,6 +514,17 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     ty: Some(val.get_type()),
                 });
             }
+            ExprKind::Ref(expr) => {
+                let expr = self.traverse_expr(&mut expr.kind).unwrap();
+                let ty = expr.ty.unwrap();
+                let val = expr.value;
+                let ptr = val.into_pointer_value();
+                return Some(CodeGenResult {
+                    value: ptr.into(),
+                    ty: Some(ty),
+                });
+            }
+
             ExprKind::Array(exprs) => {
                 // Constant arrays
                 // How it SHOULD be done:

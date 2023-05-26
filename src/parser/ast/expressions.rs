@@ -7,6 +7,7 @@ pub enum ExprKind<'a> {
     Binary(BinaryOp, Expr<'a>, Expr<'a>),
     Unary(UnaryOp, Expr<'a>),
     Literal(Literal<'a>),
+    Ref(Expr<'a>),
     Array(Vec<Expr<'a>>),
     StructInit(&'a str, Vec<Expr<'a>>),
     FieldAccess(Expr<'a>, &'a str),

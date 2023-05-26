@@ -127,7 +127,6 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     },
                 }
             }
-
             Token::Symbol(ParenOpen) => {
                 self.eat_token()?;
                 let expr = self.parse_expression(0)?;
@@ -140,7 +139,11 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     });
                 }
             }
-
+            Token::Symbol(And) => {
+                self.eat_token()?;
+                let expr = self.parse_expression(0)?;
+                ExprKind::Ref(expr).into()
+            }
             Token::Symbol(BracketOpen) => {
                 self.eat_token()?;
                 let mut array = Vec::new();
@@ -182,6 +185,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 Ok(token) => token,
                 Err(_) => break,
             };
+            println!("Right token: {:?}", right_token);
             if let Token::Symbol(Dot) = right_token {
                 self.eat_token()?;
                 let field = match self.peek_token()? {
@@ -252,6 +256,11 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 self.eat_token()?;
                 Ok(Type::from_str(name))
             }
+            Token::Symbol(And) => {
+                self.eat_token()?;
+                let ty = self.parse_type()?;
+                Ok(Type::ref_type(ty))
+            }
             _ => Err(ParseError {
                 kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
             }),
@@ -268,8 +277,11 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 if let Token::Symbol(Equal) = self.peek_token()? {
                     self.eat_token()?;
                 } else {
-                    return Err(ParseError {
-                        kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+                    return Ok(Local {
+                        ident: name,
+                        ty,
+                        is_mut,
+                        value: None,
                     });
                 }
             }
@@ -498,24 +510,8 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
             });
         }
-        let mut ty = None;
-        loop {
-            match self.peek_token()? {
-                Token::Identifier(t) => {
-                    self.eat_token()?;
-                    ty = Some(Type::from_str(t));
-                }
-                Token::Symbol(Comma) | Token::Symbol(ParenClose) | Token::Symbol(BraceClose) => {
-                    break;
-                }
-                t => {
-                    return Err(ParseError {
-                        kind: ParseErrorKind::UnexpectedToken(t),
-                    });
-                }
-            }
-        }
-        return Ok((name, ty.unwrap()));
+        let ty = self.parse_type()?;
+        return Ok((name, ty));
     }
 
     fn parse_fn_header(&mut self) -> ParseResult<'a, FnSig<'a>> {
