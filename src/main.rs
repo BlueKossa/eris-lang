@@ -33,10 +33,8 @@ fn main() {
     //visitor.module.print_to_stderr();
     //println!("LLVM:");
     //visitor.generate_object_file("tst.o");
-    println!("AST Before: {:?}", block);
     let mut semantic_visitor = SemanticVisitor::new();
     semantic_visitor.run(&mut block);
-    println!("AST After: {:?}", block);
     let structs = semantic_visitor.structs;
     let fn_decls = semantic_visitor.fn_decls;
     let ctx = Context::create();
@@ -45,7 +43,7 @@ fn main() {
     codegen_visitor.declare_functions(&fn_decls);
     codegen_visitor.create_clib_functions();
     codegen_visitor.run(&mut block);
-    codegen_visitor.dump();
+    //codegen_visitor.dump();
     codegen_visitor.dump_file("tst.ll");
     codegen_visitor.generate_machine_code("tst.o");
 }

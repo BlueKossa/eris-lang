@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct ChainMap<K, V> {
     maps: Vec<HashMap<K, V>>,
 }

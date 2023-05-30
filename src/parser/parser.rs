@@ -251,7 +251,8 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
 
     fn parse_type(&mut self) -> ParseResult<'a, Type<'a>> {
         let token = self.peek_token()?;
-        match token {
+        println!("Type token: {:?}", token);
+        let mut ty = match token {
             Token::Identifier(name) => {
                 self.eat_token()?;
                 Ok(Type::from_str(name))
@@ -264,7 +265,42 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             _ => Err(ParseError {
                 kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
             }),
+        };
+        println!("Type: {:?}", ty);
+        println!("Type token: {:?}", self.peek_token()?);
+        loop {
+            match self.peek_token()? {
+                Token::Symbol(Semicolon) | Token::Symbol(Equal)
+                | Token::Symbol(ParenClose) | Token::Symbol(BracketClose)
+                | Token::Symbol(Comma) => break,
+                Token::Symbol(And) => {
+                    self.eat_token()?;
+                    ty = Ok(Type::ref_type(ty?));
+                }
+                Token::Symbol(BracketOpen) => {
+                    self.eat_token()?;
+                    let size = self.eat_token()?;
+                    println!("Size token: {:?}", size);
+                    let size = match size {
+                        Token::Literal(Number(Integer(n))) => n.parse::<usize>().unwrap(),
+                        _ => {
+                            return Err(ParseError {
+                                kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+                            })
+                        }
+                    };
+                    self.eat_token()?;
+                    ty = Ok(Type::array_type(ty?, size));
+                }
+                _ => {
+                    return Err(ParseError {
+                        kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
+                    })
+                }
+
+            }
         }
+        ty
     }
 
     fn parse_local_decl(&mut self, name: &'a str, is_mut: bool) -> ParseResult<'a, Local<'a>> {

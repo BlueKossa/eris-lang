@@ -96,8 +96,16 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                     let struct_ty = *self.structs.get(name).unwrap().to_owned();
                     let field_ty = &struct_ty.iter().find(|(f, _)| f == field).unwrap().1;
                     Some(field_ty.to_owned())
+                } else if let TypeKind::Ref(ty) = *struct_ty.kind {
+                    if let TypeKind::Struct(name) = *ty.kind {
+                        let struct_ty = *self.structs.get(name).unwrap().to_owned();
+                        let field_ty = &struct_ty.iter().find(|(f, _)| f == field).unwrap().1;
+                        Some(field_ty.to_owned())
+                    } else {
+                        panic!("Expected struct type");
+                    }
                 } else {
-                    panic!("Expected struct type, found {:?}", struct_ty);
+                    panic!("Expected struct type");
                 }
             }
             ExprKind::ArrayAccess(array, _index) => {

@@ -26,7 +26,6 @@ impl<'a> Literal<'a> {
             LiteralKind::Float(_) => TypeKind::F32,
             LiteralKind::String(_) => TypeKind::Str,
             LiteralKind::Bool(_) => TypeKind::Bool,
-        }
-        .into()
+        }.into()
     }
 }

@@ -56,6 +56,10 @@ impl<'a> Type<'a> {
         TypeKind::Ref(ty).into()
     }
 
+    pub fn array_type(ty: Type<'a>, size: usize) -> Self {
+        TypeKind::Array(ty, size).into()
+    }
+
 }
 
 impl<'a> Into<Type<'a>> for TypeKind<'a> {
