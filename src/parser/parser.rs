@@ -270,8 +270,10 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         println!("Type token: {:?}", self.peek_token()?);
         loop {
             match self.peek_token()? {
-                Token::Symbol(Semicolon) | Token::Symbol(Equal)
-                | Token::Symbol(ParenClose) | Token::Symbol(BracketClose)
+                Token::Symbol(Semicolon)
+                | Token::Symbol(Equal)
+                | Token::Symbol(ParenClose)
+                | Token::Symbol(BracketClose)
                 | Token::Symbol(Comma) => break,
                 Token::Symbol(And) => {
                     self.eat_token()?;
@@ -297,7 +299,6 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         kind: ParseErrorKind::UnexpectedToken(self.last_token.unwrap()),
                     })
                 }
-
             }
         }
         ty
@@ -400,7 +401,9 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         };
                         let cond = ExprKind::Literal(b).into();
                         let loop_expr = self.parse_block()?;
-                        return Ok(Statement::Expression(ExprKind::Loop(cond, loop_expr).into()));
+                        return Ok(Statement::Expression(
+                            ExprKind::Loop(cond, loop_expr).into(),
+                        ));
                     }
                     Break => {
                         self.eat_token()?;
@@ -410,12 +413,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         self.eat_token()?;
                         let cond = self.parse_expression(0)?;
                         let body = self.parse_block()?;
-                        return Ok(Statement::Expression(ExprKind::If(
-                            cond,
-                            body,
-                        )
-                        .into()));
-
+                        return Ok(Statement::Expression(ExprKind::If(cond, body).into()));
                     }
                     _ => {
                         return Err(ParseError {

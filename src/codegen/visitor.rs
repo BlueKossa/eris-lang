@@ -772,7 +772,9 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
                 for param in params {
                     let param_val = match *param.kind {
-                        ExprKind::Var(_) | ExprKind::FieldAccess(_, _) | ExprKind::ArrayAccess(_, _) => {
+                        ExprKind::Var(_)
+                        | ExprKind::FieldAccess(_, _)
+                        | ExprKind::ArrayAccess(_, _) => {
                             let res = self.traverse_expr(&mut param.kind).unwrap();
                             let (val, ty) = (res.value, res.ty.unwrap());
                             println!("val: {:?}", val);

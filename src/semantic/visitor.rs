@@ -148,7 +148,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             }
             ExprKind::Var(v) => Some(self.values.get(v).unwrap().to_owned()),
             ExprKind::Break => {
-                //TODO: Check if break is inside a loop 
+                //TODO: Check if break is inside a loop
                 None
             }
             ExprKind::Return(_) => None,
