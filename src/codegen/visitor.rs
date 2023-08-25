@@ -128,13 +128,10 @@ impl<'a> CodeGenVisitor<'a> {
         todo!();
     }
 
-    pub fn declare_functions(
-        &mut self,
-        fn_decls: &HashMap<&'a str, Box<(Vec<Type<'a>>, Type<'a>)>>,
-    ) {
-        for (name, ptr) in fn_decls.iter() {
+    pub fn declare_functions(&mut self, fn_decls: &HashMap<&'a str, (Vec<Type<'a>>, Type<'a>)>) {
+        for (name, sig) in fn_decls.iter() {
             let mut param_types: Vec<BasicMetadataTypeEnum> = Vec::new();
-            let (params, ret_ty) = ptr.as_ref();
+            let (params, ret_ty) = sig;
             for param in params {
                 param_types.push(self.to_llvm_type(param).into());
             }
@@ -152,7 +149,12 @@ impl<'a> CodeGenVisitor<'a> {
         self.module.add_function("putchar", fn_ty, None);
     }
 
-    pub fn declare_structs(&mut self, structs: &HashMap<&'a str, Box<Vec<(&'a str, Type<'a>)>>>) {
+    pub fn declare_structs(&mut self, structs: &HashMap<&'a str, Vec<(&'a str, Type<'a>)>>) {
+        // Add all structs to the module
+        for (name, _) in structs.iter() {
+            self.context.opaque_struct_type(name);
+        }
+        // Generate the structs
         for (name, ptr) in structs.iter() {
             let mut struct_types: HashMap<&'a str, usize> = HashMap::new();
             let mut types: Vec<BasicTypeEnum> = Vec::new();
@@ -160,7 +162,7 @@ impl<'a> CodeGenVisitor<'a> {
                 types.push(self.to_llvm_type(ty));
                 struct_types.insert(n, i);
             }
-            let struct_type = self.context.opaque_struct_type(name);
+            let struct_type = self.context.get_struct_type(name).unwrap();
             struct_type.set_body(&types, false);
 
             self.structs.insert(name, struct_types);
@@ -198,11 +200,11 @@ impl<'a> CodeGenVisitor<'a> {
             )
             .unwrap();
         let file_type = FileType::Object;
-        println!("Writing to file: {}", path);
+
         target_machine
             .write_to_file(&self.module, file_type, Path::new(path))
             .unwrap();
-        println!("CC:");
+
         let mut command = Command::new("cc");
         command.arg(path).arg("-o").arg("a.out");
         let r = command.output().unwrap();
@@ -305,12 +307,22 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
     }
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
-        let ty = self.to_llvm_type(&local.ty.as_ref().unwrap());
+        println!("Local: {}", local.ident);
+        let ty = self.to_llvm_type(local.ty.as_ref().unwrap());
         let (value, lty) = match local.value {
             Some(ref mut expr) => {
                 let res = self.traverse_expr(&mut expr.kind).unwrap();
-                let (value, lty) = (res.value, res.ty.unwrap());
+                let (mut value, lty) = (res.value, res.ty.unwrap());
+                match *expr.kind {
+                    ExprKind::Var(_)
+                    | ExprKind::FieldAccess(_, _)
+                    | ExprKind::ArrayAccess(_, _) => {
+                        value = self.builder.build_load(value.into_pointer_value(), "load");
+                    }
+                    _ => {}
+                }
                 if ty != lty {
+                    println!("{:?} {:?}", ty, lty);
                     let value = value.into_int_value().const_cast(ty.into_int_type(), false);
                     (value.into(), ty)
                 } else {
@@ -467,10 +479,10 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     }
                     _ => unimplemented!(),
                 };
-                return Some(CodeGenResult {
+                Some(CodeGenResult {
                     value: val,
                     ty: Some(ty),
-                });
+                })
             }
             ExprKind::Unary(op, expr) => {
                 let expr = self.traverse_expr(&mut expr.kind).unwrap();
@@ -484,7 +496,6 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                         let res = match op {
                             UnaryOp::Negate => self.builder.build_int_neg(a, "neg"),
                             UnaryOp::Not => self.builder.build_not(a, "not"),
-                            o => unimplemented!("{:?}", o),
                         };
                         res.into()
                     }
@@ -497,10 +508,10 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     }
                     _ => unimplemented!(),
                 };
-                return Some(CodeGenResult {
+                Some(CodeGenResult {
                     value: val,
                     ty: Some(ty),
-                });
+                })
             }
             ExprKind::Literal(lit) => {
                 let val: BasicValueEnum = match lit.kind {
@@ -546,14 +557,17 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 });
             }
             ExprKind::Ref(expr) => {
+                if let ExprKind::Var(_var) = *expr.kind {
+                    return self.traverse_expr(&mut expr.kind);
+                }
                 let expr = self.traverse_expr(&mut expr.kind).unwrap();
                 let ty = expr.ty.unwrap();
                 let val = expr.value;
                 let ptr = val.into_pointer_value();
-                return Some(CodeGenResult {
+                Some(CodeGenResult {
                     value: ptr.into(),
                     ty: Some(ty),
-                });
+                })
             }
 
             ExprKind::Array(exprs) => {
@@ -667,10 +681,12 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     .builder
                     .build_struct_gep(struct_ptr, *field_index as u32, "fieldaccess")
                     .unwrap();
-                return Some(CodeGenResult {
+                println!("field_ptr: {:?}", field_ptr);
+                println!("field_type: {:?}", field_type);
+                Some(CodeGenResult {
                     value: field_ptr.into(),
                     ty: Some(field_type),
-                });
+                })
             }
             ExprKind::ArrayAccess(array, index) => {
                 let array = self.traverse_expr(&mut array.kind).unwrap();
@@ -683,14 +699,14 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 };
                 let ty = array_ty.into_array_type();
                 let elem_ty = ty.get_element_type();
-                println!("elem_ty: {:?}", elem_ty);
+
                 let index = self.traverse_expr(&mut index.kind).unwrap();
                 let index_val = if let BasicValueEnum::PointerValue(ptr) = index.value {
                     self.builder.build_load(ptr, "load").into_int_value()
                 } else {
                     index.value.into_int_value()
                 };
-                println!("index_val: {:?}", index_val);
+
                 unsafe {
                     let elem_ptr = self.builder.build_in_bounds_gep(
                         array_ptr,
@@ -754,16 +770,22 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
 
                 None
             }
-            ExprKind::Assign(lhs, rhs) => {
-                let rhs = self.traverse_expr(&mut rhs.kind).unwrap();
+            ExprKind::Assign(lhs, rhs_expr) => {
+                let rhs = self.traverse_expr(&mut rhs_expr.kind).unwrap();
                 let mut rhs_val = rhs.value;
-                println!("rhs_val: {:?}", rhs_val);
-                if let BasicValueEnum::PointerValue(ptr) = rhs_val {
-                    rhs_val = self.builder.build_load(ptr, "load");
+                match *rhs_expr.kind {
+                    ExprKind::Var(_)
+                    | ExprKind::FieldAccess(_, _)
+                    | ExprKind::ArrayAccess(_, _) => {
+                        rhs_val = self
+                            .builder
+                            .build_load(rhs_val.into_pointer_value(), "load");
+                    }
+                    _ => {}
                 }
-                println!("rhs_val: {:?}", rhs_val);
+
                 let lhs = self.traverse_expr(&mut lhs.kind).unwrap();
-                let mut lhs_ptr = lhs.value.into_pointer_value();
+                let lhs_ptr = lhs.value.into_pointer_value();
                 self.builder.build_store(lhs_ptr, rhs_val);
                 return None;
             }
@@ -776,13 +798,8 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                         | ExprKind::FieldAccess(_, _)
                         | ExprKind::ArrayAccess(_, _) => {
                             let res = self.traverse_expr(&mut param.kind).unwrap();
-                            let (val, ty) = (res.value, res.ty.unwrap());
-                            println!("val: {:?}", val);
-                            if let BasicValueEnum::PointerValue(ptr) = val {
-                                self.builder.build_load(ptr, "load")
-                            } else {
-                                val
-                            }
+                            let (val, _ty) = (res.value, res.ty.unwrap());
+                            self.builder.build_load(val.into_pointer_value(), "load")
                         }
                         _ => self.traverse_expr(&mut param.kind).unwrap().value,
                     };

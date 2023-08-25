@@ -12,8 +12,8 @@ use crate::{parser::ast::blocks::Block, visitor::visitor_pattern::MutVisitorPatt
 
 pub struct SemanticVisitor<'a> {
     values: ChainMap<&'a str, Type<'a>>,
-    pub(crate) fn_decls: HashMap<&'a str, Box<(Vec<Type<'a>>, Type<'a>)>>,
-    pub(crate) structs: HashMap<&'a str, Box<Vec<(&'a str, Type<'a>)>>>,
+    pub(crate) fn_decls: HashMap<&'a str, (Vec<Type<'a>>, Type<'a>)>,
+    pub(crate) structs: HashMap<&'a str, Vec<(&'a str, Type<'a>)>>,
 }
 
 #[inline(always)]
@@ -82,7 +82,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 Some(TypeKind::Array(ty, a.len()).into())
             }
             ExprKind::StructInit(name, fields) => {
-                let struct_ty = *self.structs.get(name).unwrap().to_owned();
+                let struct_ty = self.structs.get(name).unwrap().to_owned();
                 for (field, expr) in fields.iter_mut().enumerate() {
                     let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
                     let ty2 = &struct_ty.get(field).unwrap().1;
@@ -93,12 +93,12 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             ExprKind::FieldAccess(struct_, field) => {
                 let struct_ty = self.traverse_expr(&mut struct_.kind).unwrap();
                 if let TypeKind::Struct(name) = *struct_ty.kind {
-                    let struct_ty = *self.structs.get(name).unwrap().to_owned();
+                    let struct_ty = self.structs.get(name).unwrap().to_owned();
                     let field_ty = &struct_ty.iter().find(|(f, _)| f == field).unwrap().1;
                     Some(field_ty.to_owned())
                 } else if let TypeKind::Ref(ty) = *struct_ty.kind {
                     if let TypeKind::Struct(name) = *ty.kind {
-                        let struct_ty = *self.structs.get(name).unwrap().to_owned();
+                        let struct_ty = self.structs.get(name).unwrap().to_owned();
                         let field_ty = &struct_ty.iter().find(|(f, _)| f == field).unwrap().1;
                         Some(field_ty.to_owned())
                     } else {
@@ -111,7 +111,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             ExprKind::ArrayAccess(array, _index) => {
                 //TODO
                 if let TypeKind::Array(ty, _) = *self.traverse_expr(&mut array.kind).unwrap().kind {
-                    Some(ty.into())
+                    Some(ty)
                 } else {
                     panic!("Expected array type");
                 }
@@ -138,7 +138,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 if res.is_none() {
                     return Some(TypeKind::Void.into());
                 }
-                let (param_types, fn_type) = *res.unwrap().to_owned();
+                let (param_types, fn_type) = res.unwrap().to_owned();
                 for (i, expr) in params.iter_mut().enumerate() {
                     let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
                     let ty2 = param_types.get(i).unwrap();
@@ -164,7 +164,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                     .iter()
                     .map(|f| (f.name, f.ty.to_owned()))
                     .collect::<Vec<_>>();
-                self.structs.insert(s.name, Box::new(fields));
+                self.structs.insert(s.name, fields);
                 None
             }
             Constant(_, _, _) => todo!(),
@@ -179,7 +179,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
             .map(|(_name, ty)| ty.to_owned())
             .collect::<Vec<_>>();
         self.fn_decls
-            .insert(function.name, Box::new((args, sig.ret.to_owned())));
+            .insert(function.name, (args, sig.ret.to_owned()));
         for (name, ty) in sig.args.iter() {
             self.values.insert(name, ty.to_owned());
         }
@@ -199,19 +199,26 @@ impl<'a> SemanticVisitor<'a> {
 
     pub fn run(&mut self, entry: &mut Block<'a>) {
         self.traverse_block(entry);
-        drop(entry);
     }
 
-    fn type_check(&self, ty1: &Type, ty2: &Type) {
-        match (*ty1.kind.to_owned(), *ty2.kind.to_owned()) {
-            (TypeKind::Ref(ty1), TypeKind::Ref(ty2)) => self.type_check(&ty1, &ty2),
-            (TypeKind::Ref(ty1), _) => self.type_check(&ty1, &ty2),
-            (_, TypeKind::Ref(ty2)) => self.type_check(&ty1, &ty2),
-            (t1, t2) => {
-                if t1 != t2 {
-                    type_mismatch(&t1, &t2);
-                }
-            }
-        }
+    fn type_check(&self, a: &Type, b: &Type) {
+        let mut ty1 = a;
+        let mut ty2 = b;
+        // TODO: Review
+        //loop {
+        //    match (*ty1.kind.to_owned(), *ty2.kind.to_owned()) {
+        //        (TypeKind::Ref(t1), TypeKind::Ref(t2)) => {
+        //            ty1 = &t1;
+        //            ty2 = &t2;
+        //        }
+        //        (TypeKind::Ref(ty1), _) => self.type_check(&ty1, ty2),
+        //        (_, TypeKind::Ref(ty2)) => self.type_check(ty1, &ty2),
+        //        (t1, t2) => {
+        //            if t1 != t2 {
+        //                type_mismatch(&t1, &t2);
+        //            }
+        //        }
+        //    }
+        //}
     }
 }
