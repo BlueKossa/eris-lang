@@ -57,7 +57,7 @@ impl<'a> CodeGenVisitor<'a> {
         }
     }
 
-    fn to_llvm_type(&mut self, ty: &Type<'a>) -> BasicTypeEnum<'a> {
+    fn to_llvm_type(&self, ty: &Type<'a>) -> BasicTypeEnum<'a> {
         match &*ty.kind {
             TypeKind::I8 => self.context.i8_type().into(),
             TypeKind::I16 => self.context.i16_type().into(),
@@ -85,14 +85,14 @@ impl<'a> CodeGenVisitor<'a> {
                 .ptr_type(AddressSpace::default())
                 .into(),
             TypeKind::Array(ty, len) => {
-                let ty = self.to_llvm_type(&ty);
+                let ty = self.to_llvm_type(ty);
                 let arr_ty = ty.array_type(*len as u32);
                 arr_ty.into()
             }
             // TODO: Fix this, void is not supposed to be an int
             TypeKind::Void => self.context.i8_type().into(),
             TypeKind::Ref(ty) => {
-                let ty = self.to_llvm_type(&ty);
+                let ty = self.to_llvm_type(ty);
                 ty.ptr_type(AddressSpace::default()).into()
             }
             t => todo!("{:?}", t),
@@ -100,7 +100,7 @@ impl<'a> CodeGenVisitor<'a> {
     }
 
     fn to_llvm_fn_type(
-        &mut self,
+        &self,
         ty: &Type<'a>,
         args: &[BasicMetadataTypeEnum<'a>],
     ) -> FunctionType<'a> {
@@ -124,9 +124,6 @@ impl<'a> CodeGenVisitor<'a> {
         }
     }
 
-    pub fn generate_object_file(&self, name: &str) {
-        todo!();
-    }
 
     pub fn declare_functions(&mut self, fn_decls: &HashMap<&'a str, (Vec<Type<'a>>, Type<'a>)>) {
         for (name, sig) in fn_decls.iter() {
@@ -207,7 +204,7 @@ impl<'a> CodeGenVisitor<'a> {
 
         let mut command = Command::new("cc");
         command.arg(path).arg("-o").arg("a.out");
-        let r = command.output().unwrap();
+        let _r = command.output().unwrap();
     }
 
     #[cfg(target_os = "windows")]
@@ -237,39 +234,6 @@ impl<'a> CodeGenVisitor<'a> {
         command.arg(path).arg("-o").arg("a.exe");
         let r = command.output().unwrap();
     }
-
-    // LLVM 14/15 cross-compatibility, not required atm since I changed everything to llvm 14
-
-    // If windows
-    pub fn _build_load<T: BasicType<'a>>(
-        &mut self,
-        ty: T,
-        ptr: PointerValue<'a>,
-        name: &'a str,
-    ) -> BasicValueEnum<'a> {
-        self.builder.build_load(ptr, name)
-    }
-    // If not windows
-    //#[cfg(not(target_os = "windows"))]
-    //pub fn build_load<T: BasicType<'a>>(&mut self, ty: T, ptr: PointerValue<'a>, name: &'a str) -> BasicValueEnum<'a> {
-    //    self.builder.build_load(ty, ptr, name)
-    //}
-
-    // If windows
-    pub fn _build_struct_gep<T: BasicType<'a>>(
-        &mut self,
-        struct_ty: T,
-        ptr: PointerValue<'a>,
-        index: u32,
-        name: &'a str,
-    ) -> Result<PointerValue<'a>, ()> {
-        self.builder.build_struct_gep(ptr, index, name)
-    }
-
-    //#[cfg(not(target_os = "windows"))]
-    //pub fn build_struct_gep<T: BasicType<'a>>(&mut self, struct_ty: T, ptr: PointerValue<'a>, index: u32, name: &'a str) -> Result<PointerValue<'a>, ()> {
-    //    self.builder.build_struct_gep(struct_ty, ptr, index, name)
-    //}
 }
 
 pub struct CodeGenResult<'a> {
@@ -626,10 +590,10 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                         self.builder.build_store(ptr, val);
                     }
                 }
-                return Some(CodeGenResult {
+                Some(CodeGenResult {
                     value: array_alloc.into(),
                     ty: Some(array_type.into()),
-                });
+                })
             }
             ExprKind::StructInit(ident, fields) => {
                 let struct_ty = self.module.get_struct_type(ident).unwrap();
@@ -648,10 +612,10 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     self.builder.build_store(field_ptr, val);
                 }
 
-                return Some(CodeGenResult {
+                Some(CodeGenResult {
                     value: struct_val.into(),
                     ty: Some(struct_ty.into()),
-                });
+                })
             }
             ExprKind::FieldAccess(struct_, field) => {
                 let struct_ = self.traverse_expr(&mut struct_.kind).unwrap();
@@ -714,10 +678,10 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                         "arrayaccess",
                     );
 
-                    return Some(CodeGenResult {
+                    Some(CodeGenResult {
                         value: elem_ptr.into(),
                         ty: Some(elem_ty),
-                    });
+                    })
                 }
             }
             ExprKind::MethodCall(_, _, _) => todo!(),
@@ -741,7 +705,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 self.builder.position_at_end(else_block);
                 self.builder.build_unconditional_branch(end_block);
                 self.builder.position_at_end(end_block);
-                return None;
+                None
             }
             ExprKind::Loop(cond, body) => {
                 let start_block = self.builder.get_insert_block().unwrap();
@@ -787,7 +751,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let lhs = self.traverse_expr(&mut lhs.kind).unwrap();
                 let lhs_ptr = lhs.value.into_pointer_value();
                 self.builder.build_store(lhs_ptr, rhs_val);
-                return None;
+                None
             }
             ExprKind::Call(ident, params) => {
                 let func = self.module.get_function(ident).unwrap();
@@ -820,10 +784,10 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             }
             ExprKind::Var(ident) => {
                 let val = self.values.get(ident).unwrap();
-                return Some(CodeGenResult {
+                Some(CodeGenResult {
                     value: val.0,
                     ty: Some(val.1),
-                });
+                })
             }
             ExprKind::Break => {
                 let insert_block = self.builder.get_insert_block().unwrap();
@@ -833,7 +797,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     .context
                     .append_basic_block(insert_block.get_parent().unwrap(), "buffer");
                 self.builder.position_at_end(buffer_block);
-                return None;
+                None
             }
             ExprKind::Return(expr) => {
                 if let Some(expr) = expr {
@@ -846,7 +810,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 } else {
                     self.builder.build_return(None);
                 }
-                return None;
+                None
             }
         }
     }
@@ -873,7 +837,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);
         self.traverse_block(&mut function.body);
-        if let None = func.get_type().get_return_type() {
+        if func.get_type().get_return_type().is_none() {
             self.builder.build_return(None);
         }
         self.values.pop_map();
