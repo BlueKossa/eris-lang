@@ -9,3 +9,12 @@ pub enum Token<'a> {
     Comment,
     EOF,
 }
+
+impl<'a> Token<'a> {
+    pub fn get_identifier(&self) -> Option<&'a str> {
+        match self {
+            Token::Identifier(s) => Some(s),
+            _ => None,
+        }
+    }
+}
