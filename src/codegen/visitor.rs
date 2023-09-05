@@ -9,8 +9,8 @@ use inkwell::{
     types::{
         AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, StructType,
     },
-    values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum, PointerValue},
-    AddressSpace, OptimizationLevel,
+    values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum, PointerValue, AsValueRef, AnyValue},
+    AddressSpace, OptimizationLevel, attributes::{Attribute, AttributeLoc},
 };
 
 use crate::{
@@ -126,14 +126,38 @@ impl<'a> CodeGenVisitor<'a> {
 
 
     pub fn declare_functions(&mut self, fn_decls: &HashMap<&'a str, (Vec<Type<'a>>, Type<'a>)>) {
+        use BasicTypeEnum as BTE;
         for (name, sig) in fn_decls.iter() {
             let mut param_types: Vec<BasicMetadataTypeEnum> = Vec::new();
+            let mut attributed_params = Vec::new();
             let (params, ret_ty) = sig;
-            for param in params {
-                param_types.push(self.to_llvm_type(param).into());
+            for (i, param) in params.iter().enumerate() {
+                let ty = match self.to_llvm_type(param) {
+                    BTE::StructType(s) => {
+                        let by_val = self.context.create_type_attribute(Attribute::get_named_enum_kind_id("byval"), s.into());
+                        attributed_params.push((i as u32, by_val));
+                        let ptr_ty = s.ptr_type(AddressSpace::default());
+                        ptr_ty.into()
+                    }
+                    BTE::ArrayType(a) => {
+                        let by_val = self.context.create_type_attribute(Attribute::get_named_enum_kind_id("byval"), a.into());
+                        attributed_params.push((i as u32, by_val));
+                        let ptr_ty = a.ptr_type(AddressSpace::default());
+                        ptr_ty.into()
+                    }
+                    _ => {
+                        let ty = self.to_llvm_type(param);
+                        ty
+                    }
+                };
+                param_types.push(ty.into());
             }
             let fn_type = self.to_llvm_fn_type(ret_ty, &param_types);
-            self.module.add_function(name, fn_type, None);
+
+            let func = self.module.add_function(name, fn_type, None);
+            for (i, attr) in attributed_params.drain(..) {
+                func.add_attribute(AttributeLoc::Param(i), attr);
+            }
         }
     }
 
@@ -756,23 +780,44 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             ExprKind::Call(ident, params) => {
                 let func = self.module.get_function(ident).unwrap();
                 let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
-                for param in params {
-                    let param_val = match *param.kind {
+                let mut attributed_params: Vec<(u32, Attribute)> = Vec::new();
+                for (i, param) in params.iter_mut().enumerate() {
+                    let (param_val, param_ty) = match *param.kind {
                         ExprKind::Var(_)
                         | ExprKind::FieldAccess(_, _)
                         | ExprKind::ArrayAccess(_, _) => {
                             let res = self.traverse_expr(&mut param.kind).unwrap();
-                            let (val, _ty) = (res.value, res.ty.unwrap());
-                            self.builder.build_load(val.into_pointer_value(), "load")
+                            let (val, ty) = (res.value, res.ty.unwrap());
+                            (self.builder.build_load(val.into_pointer_value(), "load"), ty)
                         }
-                        _ => self.traverse_expr(&mut param.kind).unwrap().value,
+                        _ =>  {
+                            let res = self.traverse_expr(&mut param.kind).unwrap();
+                            (res.value, res.ty.unwrap())
+                        }
                     };
-                    args.push(param_val.into());
+                    let val = match param_ty {
+                        BasicTypeEnum::StructType(s) => {
+                            let by_val = self.context.create_type_attribute(Attribute::get_named_enum_kind_id("byval"), s.into());
+                            attributed_params.push((i as u32, by_val));
+                            let ptr = self.builder.build_alloca(s, "struct");
+                            self.builder.build_store(ptr, param_val);
+                            ptr.into()
+                        }
+                        _ => param_val,
+                    };
+
+                    args.push(val.into());
                 }
 
-                let val = self
+                let call = self
                     .builder
-                    .build_call(func, &args, "call")
+                    .build_call(func, &args, "call");
+
+                for (i, attr) in attributed_params.drain(..) {
+                    call.add_attribute(AttributeLoc::Param(i), attr);
+                }
+
+                let val = call
                     .try_as_basic_value()
                     .left();
                 //TODO: Fix this, void functions should return void
