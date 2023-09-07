@@ -143,7 +143,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             Token::Symbol(And) => {
                 self.eat()?;
                 let expr = self.parse_expression(0)?;
-                ExprKind::Ref(expr).into()
+                ExprKind::Address(expr).into()
             }
             Token::Symbol(BracketOpen) => {
                 self.eat()?;
@@ -186,31 +186,40 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 Err(_) => break,
             };
 
-            if let Token::Symbol(Dot) = right_token {
-                self.eat()?;
-                let field = match self.peek()? {
-                    Token::Identifier(id) => id,
-                    _ => {
+            match right_token {
+                Token::Symbol(Dot) => {
+                    self.eat()?;
+                    let field = match self.peek()? {
+                        Token::Identifier(id) => id,
+                        _ => {
+                            return Err(ParseError {
+                                kind: ParseErrorKind::UnexpectedToken(self.peek()?),
+                            })
+                        }
+                    };
+                    self.eat()?;
+                    lhs = ExprKind::FieldAccess(lhs, field).into();
+                    continue;
+                }
+                Token::Symbol(BracketOpen) => {
+                    self.eat()?;
+                    let index = self.parse_expression(0)?;
+                    if let Token::Symbol(BracketClose) = self.peek()? {
+                        self.eat()?;
+                        lhs = ExprKind::ArrayIndex(lhs, index).into();
+                        continue;
+                    } else {
                         return Err(ParseError {
                             kind: ParseErrorKind::UnexpectedToken(self.peek()?),
-                        })
+                        });
                     }
-                };
-                self.eat()?;
-                lhs = ExprKind::FieldAccess(lhs, field).into();
-                continue;
-            } else if let Token::Symbol(BracketOpen) = right_token {
-                self.eat()?;
-                let index = self.parse_expression(0)?;
-                if let Token::Symbol(BracketClose) = self.peek()? {
-                    self.eat()?;
-                    lhs = ExprKind::ArrayIndex(lhs, index).into();
-                    continue;
-                } else {
-                    return Err(ParseError {
-                        kind: ParseErrorKind::UnexpectedToken(self.peek()?),
-                    });
                 }
+                Token::Symbol(DotAsterisk) => {
+                    self.eat()?;
+                    lhs = ExprKind::Deref(lhs).into();
+                    continue;
+                }
+                _ => (),
             }
 
             if let (Token::Symbol(ParenOpen), Token::Identifier(fn_name)) =

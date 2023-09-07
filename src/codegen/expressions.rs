@@ -32,7 +32,8 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             ExprKind::Binary(_, _, _) => self.visit_binary(expr),
             ExprKind::Unary(_, _) => self.visit_unary(expr),
             ExprKind::Literal(_) => self.visit_literal(expr),
-            ExprKind::Ref(_) => self.visit_address_of(expr),
+            ExprKind::Address(_) => self.visit_address_of(expr),
+            ExprKind::Deref(_) => self.visit_deref(expr),
             ExprKind::Array(_) => self.visit_array(expr),
             ExprKind::StructInit(_, _) => self.visit_struct(expr),
             ExprKind::FieldAccess(_, _) => self.visit_field(expr),
@@ -194,7 +195,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
     }
 
     fn visit_address_of(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
-        create_local_tuple!(Ref, expr, expr);
+        create_local_tuple!(Address, expr, expr);
         if let ExprKind::Var(_var) = *expr.kind {
             return self.visit_expr(&mut expr.kind);
         }
@@ -209,16 +210,18 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
     }
 
     fn visit_deref(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
-        create_local_tuple!(Ref, expr, expr);
-        if let ExprKind::Var(_var) = *expr.kind {
-            return self.visit_expr(&mut expr.kind);
-        }
+        create_local_tuple!(Deref, expr, expr);
         let expr = self.visit_expr(&mut expr.kind).unwrap();
         let ty = expr.ty.unwrap();
         let val = expr.value;
-        let ptr = val.into_pointer_value();
+        let ptr = if let BasicValueEnum::PointerValue(ptr) = val {
+            ptr
+        } else {
+            panic!("Expected pointer type");
+        };
+        let val = self.builder.build_load(ptr, "load");
         Some(CodeGenResult {
-            value: ptr.into(),
+            value: val,
             ty: Some(ty),
         })
     }
@@ -403,7 +406,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             };
             let val = match param_ty {
                 BasicTypeEnum::StructType(s) => {
-                    if let ExprKind::Ref(_) = *param.kind {
+                    if let ExprKind::Address(_) = *param.kind {
                         param_val
                     } else {
                         let by_val = self.context.create_type_attribute(

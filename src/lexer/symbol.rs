@@ -48,6 +48,7 @@ pub enum Symbol {
     PipePipe,
 
     ColonColon,
+    DotAsterisk,
 }
 
 impl FromStr for Symbol {
@@ -101,6 +102,7 @@ impl FromStr for Symbol {
             "||" => Ok(Symbol::PipePipe),
 
             "::" => Ok(Symbol::ColonColon),
+            ".*" => Ok(Symbol::DotAsterisk),
 
             _ => Err(format!("Invalid symbol: {}", s)),
         }

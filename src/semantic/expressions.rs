@@ -17,9 +17,17 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
             }
             ExprKind::Unary(_op, expr) => self.visit_expr(&mut expr.kind),
             ExprKind::Literal(lit) => Some(lit.to_ty()),
-            ExprKind::Ref(expr) => {
+            ExprKind::Address(expr) => {
                 let ty = self.visit_expr(&mut expr.kind).unwrap();
                 Some(TypeKind::Ref(ty).into())
+            }
+            ExprKind::Deref(expr) => {
+                let ty = self.visit_expr(&mut expr.kind).unwrap();
+                if let TypeKind::Ref(ty) = *ty.kind {
+                    Some(ty.into())
+                } else {
+                    panic!("Expected an address");
+                }
             }
             ExprKind::Array(a) => {
                 let ty = self.visit_expr(&mut a[0].kind).unwrap();
