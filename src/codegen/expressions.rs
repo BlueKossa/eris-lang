@@ -344,8 +344,6 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             .builder
             .build_struct_gep(struct_ty, struct_ptr, *field_index as u32, "fieldaccess")
             .unwrap();
-        println!("field_ptr: {:?}", field_ptr);
-        println!("field_type: {:?}", field_type);
         Some(CodeGenResult {
             value: field_ptr.into(),
             ty: Some(field_type),

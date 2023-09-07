@@ -480,7 +480,6 @@ impl<'a> Visitor<'a> {
         let block = &func.body;
         let mut void = false;
         let mut args: Vec<BasicMetadataTypeEnum> = Vec::with_capacity(sig.args.len());
-        dbg!("FN1");
         for a in &sig.args {
             let arg: BasicMetadataTypeEnum = match a.1 {
                 Type::I32 => self.context.i32_type().into(),
@@ -493,7 +492,6 @@ impl<'a> Visitor<'a> {
             };
             args.push(arg);
         }
-        dbg!("FN2");
         let fn_ty = match sig.ret {
             Type::I32 => self.context.i32_type().fn_type(&args, false),
             Type::F32 => self.context.f32_type().fn_type(&args, false),
@@ -507,21 +505,18 @@ impl<'a> Visitor<'a> {
             }
             _ => todo!(),
         };
-        dbg!("FN3");
         let func = self.module.add_function(name, fn_ty, None);
         for (i, arg) in sig.args.iter().enumerate() {
             let a = func.get_nth_param(i as u32).unwrap();
             a.set_name(arg.0);
             self.values.insert(arg.0, (a, a.get_type()));
         }
-        dbg!("FN4");
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);
         self.traverse_block(&mut block.to_owned());
         if void {
             self.builder.build_return(None);
         }
-        dbg!("FN5");
         VisitorResult::default()
     }
 

@@ -306,7 +306,6 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
     }
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
-        println!("Local: {}", local.ident);
         let ty = self.to_llvm_type(local.ty.as_ref().unwrap());
         let (value, lty) = match local.value {
             Some(ref mut expr) => {
@@ -320,7 +319,6 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     _ => {}
                 }
                 if ty != lty {
-                    println!("{:?} {:?}", ty, lty);
                     let value = value.into_int_value().const_cast(ty.into_int_type(), false);
                     (value.into(), ty)
                 } else {

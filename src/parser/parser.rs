@@ -426,7 +426,6 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     }
                 }
             } else {
-                println!("{:?}", self.peek_nth(1)?);
                 match self.peek_nth(1)? {
                     Token::Symbol(ColonEqual) | Token::Symbol(Colon) => {
                         let local = self.parse_local_decl(false)?;
@@ -620,11 +619,9 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         }
         let mut fields: Vec<Field> = Vec::new();
         loop {
-            dbg!(self.peek()?);
             match self.peek()? {
                 Token::Identifier(_) => {
                     let field = self.parse_arg()?;
-                    dbg!("PUSHING FIELD");
                     fields.push(Field {
                         name: field.0,
                         ty: field.1,
