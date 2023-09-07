@@ -314,7 +314,8 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let (mut value, lty) = (res.value, res.ty.unwrap());
                 match *expr.kind {
                     ExprKind::Var(_) | ExprKind::FieldAccess(_, _) | ExprKind::ArrayIndex(_, _) => {
-                        value = self.builder.build_load(value.into_pointer_value(), "load");
+                        let ptr = value.into_pointer_value();
+                        value = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
                     }
                     _ => {}
                 }
@@ -328,7 +329,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             }
             None => {
                 //REVIEW: Can you do this?
-                let alloca = self.builder.build_alloca(ty, "");
+                let alloca = self.builder.build_alloca(ty, "").unwrap();
                 self.values.insert(local.ident, (alloca.into(), ty));
                 return None;
             }
@@ -356,7 +357,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             if !lty.is_pointer_type() {
                 //value = self.builder.build_load(ptr, "load");
             }
-            let alloca = self.builder.build_alloca(ty, "");
+            let alloca = self.builder.build_alloca(ty, "").unwrap();
 
             ptr.replace_all_uses_with(alloca);
             ptr.as_instruction_value()
@@ -367,9 +368,9 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
 
             alloca
         } else {
-            let alloca = self.builder.build_alloca(ty, "");
+            let alloca = self.builder.build_alloca(ty, "").unwrap();
             self.builder.position_at_end(current_block);
-            self.builder.build_store(alloca, value);
+            self.builder.build_store(alloca, value).unwrap();
             alloca
         };
 
@@ -400,7 +401,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         self.builder.position_at_end(entry);
         self.traverse_block(&mut function.body);
         if func.get_type().get_return_type().is_none() {
-            self.builder.build_return(None);
+            self.builder.build_return(None).unwrap();
         }
         self.values.pop_map();
 
