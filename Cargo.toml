@@ -8,12 +8,3 @@ edition = "2021"
 [dependencies]
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"] }
 itertools = "0.11.0"
-
-# Dependencies for linux platform ONLY
-#[target.'cfg(unix)'.dependencies]
-#inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm15-0"] }
-#
-#Dependencies for windows platform ONLY
-#[target.'cfg(windows)'.dependencies]
-#inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"] }
-
