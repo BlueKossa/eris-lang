@@ -11,21 +11,22 @@ pub enum ExprKind<'a> {
     Array(Vec<Expr<'a>>),
     StructInit(&'a str, Vec<Expr<'a>>),
     FieldAccess(Expr<'a>, &'a str),
-    ArrayAccess(Expr<'a>, Expr<'a>),
+    ArrayIndex(Expr<'a>, Expr<'a>),
+    Call(&'a str, Vec<Expr<'a>>),
     MethodCall(Expr<'a>, &'a str, Vec<Expr<'a>>),
     If(Expr<'a>, Block<'a>),
     Loop(Expr<'a>, Block<'a>),
     Assign(Expr<'a>, Expr<'a>),
-    Call(&'a str, Vec<Expr<'a>>),
     Var(&'a str),
     Break,
     Return(Option<Expr<'a>>),
 }
 
-impl<'a> Into<Expr<'a>> for ExprKind<'a> {
-    fn into(self) -> Expr<'a> {
+
+impl<'a> From<ExprKind<'a>> for Expr<'a> {
+    fn from(val: ExprKind<'a>) -> Self {
         Expr {
-            kind: Box::new(self),
+            kind: Box::new(val),
         }
     }
 }

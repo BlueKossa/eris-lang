@@ -204,7 +204,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 let index = self.parse_expression(0)?;
                 if let Token::Symbol(BracketClose) = self.peek()? {
                     self.eat()?;
-                    lhs = ExprKind::ArrayAccess(lhs, index).into();
+                    lhs = ExprKind::ArrayIndex(lhs, index).into();
                     continue;
                 } else {
                     return Err(ParseError {

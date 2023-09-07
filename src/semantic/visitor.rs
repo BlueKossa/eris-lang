@@ -8,10 +8,11 @@ use crate::parser::ast::locals::Local;
 use crate::parser::ast::statements::Statement;
 use crate::parser::ast::types::{Type, TypeKind};
 use crate::visitor::chainmap::ChainMap;
+use crate::visitor::visitor_pattern::ExpressionVisitor;
 use crate::{parser::ast::blocks::Block, visitor::visitor_pattern::MutVisitorPattern};
 
 pub struct SemanticVisitor<'a> {
-    values: ChainMap<&'a str, Type<'a>>,
+    pub(super) values: ChainMap<&'a str, Type<'a>>,
     pub(crate) fn_decls: HashMap<&'a str, (Vec<Type<'a>>, Type<'a>)>,
     pub(crate) structs: HashMap<&'a str, Vec<(&'a str, Type<'a>)>>,
 }
@@ -36,14 +37,14 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
     fn traverse_statement(&mut self, statement: &mut Statement<'a>) -> Self::ReturnType {
         match statement {
             Statement::Local(local) => self.traverse_local(local),
-            Statement::Expression(expr) => self.traverse_expr(&mut expr.kind),
+            Statement::Expression(expr) => self.visit_expr(&mut expr.kind),
             Statement::Item(item) => self.traverse_item(item),
         }
     }
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
         let ty = if let Some(expr) = &mut local.value {
-            self.traverse_expr(&mut expr.kind)
+            self.visit_expr(&mut expr.kind)
         } else {
             None
         };
@@ -55,104 +56,6 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
         self.values
             .insert(local.ident, local.ty.as_ref().unwrap().to_owned());
         None
-    }
-
-    fn traverse_expr(&mut self, expr: &mut ExprKind<'a>) -> Self::ReturnType {
-        match expr {
-            ExprKind::Binary(_op, lhs, rhs) => {
-                let ty1 = self.traverse_expr(&mut lhs.kind);
-                let ty2 = self.traverse_expr(&mut rhs.kind);
-                if let (Some(ty1), Some(ty2)) = (ty1.to_owned(), ty2) {
-                    self.type_check(&ty1, &ty2);
-                }
-                ty1
-            }
-            ExprKind::Unary(_op, expr) => self.traverse_expr(&mut expr.kind),
-            ExprKind::Literal(lit) => Some(lit.to_ty()),
-            ExprKind::Ref(expr) => {
-                let ty = self.traverse_expr(&mut expr.kind).unwrap();
-                Some(TypeKind::Ref(ty).into())
-            }
-            ExprKind::Array(a) => {
-                let ty = self.traverse_expr(&mut a[0].kind).unwrap();
-                for expr in a.iter_mut() {
-                    let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
-                    self.type_check(&ty, &ty1);
-                }
-                Some(TypeKind::Array(ty, a.len()).into())
-            }
-            ExprKind::StructInit(name, fields) => {
-                let struct_ty = self.structs.get(name).unwrap().to_owned();
-                for (field, expr) in fields.iter_mut().enumerate() {
-                    let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
-                    let ty2 = &struct_ty.get(field).unwrap().1;
-                    self.type_check(&ty1, ty2);
-                }
-                Some(TypeKind::Struct(name).into())
-            }
-            ExprKind::FieldAccess(struct_, field) => {
-                let struct_ty = self.traverse_expr(&mut struct_.kind).unwrap();
-                if let TypeKind::Struct(name) = *struct_ty.kind {
-                    let struct_ty = self.structs.get(name).unwrap().to_owned();
-                    let field_ty = &struct_ty.iter().find(|(f, _)| f == field).unwrap().1;
-                    Some(field_ty.to_owned())
-                } else if let TypeKind::Ref(ty) = *struct_ty.kind {
-                    if let TypeKind::Struct(name) = *ty.kind {
-                        let struct_ty = self.structs.get(name).unwrap().to_owned();
-                        let field_ty = &struct_ty.iter().find(|(f, _)| f == field).unwrap().1;
-                        Some(field_ty.to_owned())
-                    } else {
-                        panic!("Expected struct type");
-                    }
-                } else {
-                    panic!("Expected struct type");
-                }
-            }
-            ExprKind::ArrayAccess(array, _index) => {
-                //TODO
-                if let TypeKind::Array(ty, _) = *self.traverse_expr(&mut array.kind).unwrap().kind {
-                    Some(ty)
-                } else {
-                    panic!("Expected array type");
-                }
-            }
-            ExprKind::MethodCall(_, _, _) => todo!(),
-            ExprKind::If(_cond, body) => {
-                //TODO
-                self.traverse_block(body);
-                None
-            }
-            ExprKind::Loop(_cond, body) => {
-                //TODO: Check if loop is infinite
-                self.traverse_block(body);
-                None
-            }
-            ExprKind::Assign(var, rhs) => {
-                let ty1 = self.traverse_expr(&mut var.kind).unwrap();
-                let ty2 = self.traverse_expr(&mut rhs.kind).unwrap();
-                self.type_check(&ty1, &ty2);
-                None
-            }
-            ExprKind::Call(func, params) => {
-                let res = self.fn_decls.get(func);
-                if res.is_none() {
-                    return Some(TypeKind::Void.into());
-                }
-                let (param_types, fn_type) = res.unwrap().to_owned();
-                for (i, expr) in params.iter_mut().enumerate() {
-                    let ty1 = self.traverse_expr(&mut expr.kind).unwrap();
-                    let ty2 = param_types.get(i).unwrap();
-                    self.type_check(&ty1, ty2);
-                }
-                Some(fn_type.to_owned())
-            }
-            ExprKind::Var(v) => Some(self.values.get(v).unwrap().to_owned()),
-            ExprKind::Break => {
-                //TODO: Check if break is inside a loop
-                None
-            }
-            ExprKind::Return(_) => None,
-        }
     }
 
     fn traverse_item(&mut self, item: &mut Item<'a>) -> Self::ReturnType {
@@ -201,7 +104,7 @@ impl<'a> SemanticVisitor<'a> {
         self.traverse_block(entry);
     }
 
-    fn type_check(&self, a: &Type, b: &Type) {
+    pub(super) fn type_check(&self, a: &Type, b: &Type) {
         let mut ty1 = a;
         let mut ty2 = b;
         // TODO: Review
