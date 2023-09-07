@@ -57,10 +57,10 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let mut lhs_val = lhs.value;
         let mut rhs_val = rhs.value;
         if let BasicValueEnum::PointerValue(ptr) = lhs_val {
-            lhs_val = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
+            lhs_val = self.builder.build_load(ptr, "load").unwrap();
         }
         if let BasicValueEnum::PointerValue(ptr) = rhs_val {
-            rhs_val = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
+            rhs_val = self.builder.build_load(ptr, "load").unwrap();
         }
         let ty = lhs.ty.unwrap();
         let val: BasicValueEnum = match (lhs_val, rhs_val) {
@@ -80,7 +80,8 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                         self.builder.build_int_compare(IP::SGE, a, b, "ge")
                     }
                     o => unimplemented!("{:?}", o),
-                }.unwrap();
+                }
+                .unwrap();
                 res.into()
             }
             (BasicValueEnum::FloatValue(a), BasicValueEnum::FloatValue(b)) => {
@@ -90,25 +91,39 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                     BinaryOp::Multiply => self.builder.build_float_mul(a, b, "mul").unwrap().into(),
                     BinaryOp::Divide => self.builder.build_float_div(a, b, "div").unwrap().into(),
                     BinaryOp::Modulo => self.builder.build_float_rem(a, b, "rem").unwrap().into(),
-                    BinaryOp::Equal => self.builder.build_float_compare(FP::OEQ, a, b, "eq").unwrap().into(),
-                    BinaryOp::NotEqual => {
-                        self.builder.build_float_compare(FP::ONE, a, b, "ne").unwrap().into()
-                    }
-                    BinaryOp::LessThan => {
-                        self.builder.build_float_compare(FP::OLT, a, b, "lt").unwrap().into()
-                    }
+                    BinaryOp::Equal => self
+                        .builder
+                        .build_float_compare(FP::OEQ, a, b, "eq")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::NotEqual => self
+                        .builder
+                        .build_float_compare(FP::ONE, a, b, "ne")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::LessThan => self
+                        .builder
+                        .build_float_compare(FP::OLT, a, b, "lt")
+                        .unwrap()
+                        .into(),
 
-                    BinaryOp::LessThanEqual => {
-                        self.builder.build_float_compare(FP::OLE, a, b, "le").unwrap().into()
-                    }
+                    BinaryOp::LessThanEqual => self
+                        .builder
+                        .build_float_compare(FP::OLE, a, b, "le")
+                        .unwrap()
+                        .into(),
 
-                    BinaryOp::GreaterThan => {
-                        self.builder.build_float_compare(FP::OGT, a, b, "gt").unwrap().into()
-                    }
+                    BinaryOp::GreaterThan => self
+                        .builder
+                        .build_float_compare(FP::OGT, a, b, "gt")
+                        .unwrap()
+                        .into(),
 
-                    BinaryOp::GreaterThanEqual => {
-                        self.builder.build_float_compare(FP::OGE, a, b, "ge").unwrap().into()
-                    }
+                    BinaryOp::GreaterThanEqual => self
+                        .builder
+                        .build_float_compare(FP::OGE, a, b, "ge")
+                        .unwrap()
+                        .into(),
 
                     o => unimplemented!("{:?}", o),
                 };
@@ -127,7 +142,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let expr = self.visit_expr(&mut expr.kind).unwrap();
         let mut expr_val = expr.value;
         if let BasicValueEnum::PointerValue(ptr) = expr_val {
-            expr_val = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
+            expr_val = self.builder.build_load(ptr, "load").unwrap();
         }
         let ty = expr.ty.unwrap();
         let val: BasicValueEnum = match expr_val {
@@ -135,14 +150,16 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                 let res = match op {
                     UnaryOp::Negate => self.builder.build_int_neg(a, "neg"),
                     UnaryOp::Not => self.builder.build_not(a, "not"),
-                }.unwrap();
+                }
+                .unwrap();
                 res.into()
             }
             BasicValueEnum::FloatValue(a) => {
                 let res = match op {
                     UnaryOp::Negate => self.builder.build_float_neg(a, "neg"),
                     o => unimplemented!("{:?}", o),
-                }.unwrap();
+                }
+                .unwrap();
                 res.into()
             }
             _ => unimplemented!(),
@@ -219,7 +236,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         } else {
             panic!("Expected pointer type");
         };
-        let val = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
+        let val = self.builder.build_load(ptr, "load").unwrap();
         Some(CodeGenResult {
             value: val,
             ty: Some(ty),
@@ -260,7 +277,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         //    let v = self.traverse_expr(&mut expr.kind).unwrap();
         //    let mut val = v.value;
         //    if let BasicValueEnum::PointerValue(ptr) = val {
-        //        val = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
+        //        val = self.builder.build_load( ptr, "load").unwrap();
         //    }
         //    self.builder
         //        .build_insert_value(array_val, val, i as u32, "insert");
@@ -269,18 +286,20 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             let e = self.visit_expr(&mut expr.kind).unwrap();
             let mut val = e.value;
             if let BasicValueEnum::PointerValue(ptr) = val {
-                val = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
+                val = self.builder.build_load(ptr, "load").unwrap();
             }
             unsafe {
-                let ptr = self.builder.build_in_bounds_gep(
-                    array_type,
-                    array_alloc,
-                    &[
-                        self.context.i32_type().const_int(0, false),
-                        self.context.i32_type().const_int(i as u64, false),
-                    ],
-                    "ptr",
-                ).unwrap();
+                let ptr = self
+                    .builder
+                    .build_in_bounds_gep(
+                        array_alloc,
+                        &[
+                            self.context.i32_type().const_int(0, false),
+                            self.context.i32_type().const_int(i as u64, false),
+                        ],
+                        "ptr",
+                    )
+                    .unwrap();
                 self.builder.build_store(ptr, val).unwrap();
             }
         }
@@ -299,11 +318,11 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             let v = self.visit_expr(&mut field.kind).unwrap();
             let mut val = v.value;
             if let BasicValueEnum::PointerValue(ptr) = val {
-                val = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
+                val = self.builder.build_load(ptr, "load").unwrap();
             }
             let field_ptr = self
                 .builder
-                .build_struct_gep(struct_ty, struct_val, i as u32, "field")
+                .build_struct_gep(struct_val, i as u32, "field")
                 .unwrap();
             self.builder.build_store(field_ptr, val);
         }
@@ -342,7 +361,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let field_type = ty.get_field_type_at_index(*field_index as u32).unwrap();
         let field_ptr = self
             .builder
-            .build_struct_gep(struct_ty, struct_ptr, *field_index as u32, "fieldaccess")
+            .build_struct_gep(struct_ptr, *field_index as u32, "fieldaccess")
             .unwrap();
         Some(CodeGenResult {
             value: field_ptr.into(),
@@ -365,18 +384,23 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
 
         let index = self.visit_expr(&mut index.kind).unwrap();
         let index_val = if let BasicValueEnum::PointerValue(ptr) = index.value {
-            self.builder.build_load(ptr.get_type(), ptr, "load").unwrap().into_int_value()
+            self.builder
+                .build_load(ptr, "load")
+                .unwrap()
+                .into_int_value()
         } else {
             index.value.into_int_value()
         };
 
         unsafe {
-            let elem_ptr = self.builder.build_in_bounds_gep(
-                array_ty,
-                array_ptr,
-                &[self.context.i32_type().const_int(0, false), index_val],
-                "arrayaccess",
-            ).unwrap();
+            let elem_ptr = self
+                .builder
+                .build_in_bounds_gep(
+                    array_ptr,
+                    &[self.context.i32_type().const_int(0, false), index_val],
+                    "arrayaccess",
+                )
+                .unwrap();
 
             Some(CodeGenResult {
                 value: elem_ptr.into(),
@@ -396,10 +420,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                     let res = self.visit_expr(&mut param.kind).unwrap();
                     let (val, ty) = (res.value, res.ty.unwrap());
                     let ptr = val.into_pointer_value();
-                    (
-                        self.builder.build_load(ptr.get_type(), ptr, "load").unwrap(),
-                        ty,
-                    )
+                    (self.builder.build_load(ptr, "load").unwrap(), ty)
                 }
                 _ => {
                     let res = self.visit_expr(&mut param.kind).unwrap();
@@ -500,10 +521,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         match *rhs_expr.kind {
             ExprKind::Var(_) | ExprKind::FieldAccess(_, _) | ExprKind::ArrayIndex(_, _) => {
                 let ptr = rhs_val.into_pointer_value();
-                rhs_val = self
-                    .builder
-                    .build_load(ptr.get_type(), ptr, "load")
-                    .unwrap();
+                rhs_val = self.builder.build_load(ptr, "load").unwrap();
             }
             _ => {}
         }
@@ -540,7 +558,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             let expr = self.visit_expr(&mut expr.kind).unwrap();
             let mut expr_val = expr.value;
             if let BasicValueEnum::PointerValue(ptr) = expr_val {
-                expr_val = self.builder.build_load(ptr.get_type(), ptr, "loadret").unwrap();
+                expr_val = self.builder.build_load(ptr, "loadret").unwrap();
             }
             self.builder.build_return(Some(&expr_val));
         } else {

@@ -314,7 +314,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 match *expr.kind {
                     ExprKind::Var(_) | ExprKind::FieldAccess(_, _) | ExprKind::ArrayIndex(_, _) => {
                         let ptr = value.into_pointer_value();
-                        value = self.builder.build_load(ptr.get_type(), ptr, "load").unwrap();
+                        value = self.builder.build_load(ptr, "load").unwrap();
                     }
                     _ => {}
                 }
