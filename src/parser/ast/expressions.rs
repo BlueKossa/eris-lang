@@ -23,7 +23,6 @@ pub enum ExprKind<'a> {
     Return(Option<Expr<'a>>),
 }
 
-
 impl<'a> From<ExprKind<'a>> for Expr<'a> {
     fn from(val: ExprKind<'a>) -> Self {
         Expr {

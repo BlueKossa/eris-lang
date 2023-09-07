@@ -3,7 +3,10 @@ use crate::parser::ast::{
     statements::Statement,
 };
 
-pub trait MutVisitorPattern<'a> where Self: ExpressionVisitor<'a> {
+pub trait MutVisitorPattern<'a>
+where
+    Self: ExpressionVisitor<'a>,
+{
     type ReturnType;
     fn traverse_block(&mut self, block: &mut Block<'a>) -> Self::ExprReturnType;
 
@@ -16,12 +19,12 @@ pub trait MutVisitorPattern<'a> where Self: ExpressionVisitor<'a> {
     fn traverse_function(&mut self, function: &mut FnDecl<'a>) -> Self::ExprReturnType;
 }
 
-
-pub trait Visitor<'a> where Self: ExpressionVisitor<'a>  {
+pub trait Visitor<'a>
+where
+    Self: ExpressionVisitor<'a>,
+{
     type ReturnType;
 }
-
-
 
 pub trait ExpressionVisitor<'a> {
     type ExprReturnType;

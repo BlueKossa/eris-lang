@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::parser::ast::expressions::ExprKind;
 use crate::parser::ast::functions::FnDecl;
 use crate::parser::ast::items::Item;
 use crate::parser::ast::items::ItemKind::{Constant, Function, Struct};

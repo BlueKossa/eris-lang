@@ -434,7 +434,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     }
                     Token::Symbol(ColonColon) => {
                         // Eat ident and :: such as:
-                        // {main ::} ()... 
+                        // {main ::} ()...
                         self.eat()?;
                         self.eat()?;
                         match self.peek()? {

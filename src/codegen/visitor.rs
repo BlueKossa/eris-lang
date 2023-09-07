@@ -1,6 +1,7 @@
 use std::{collections::HashMap, path::Path, process::Command};
 
 use inkwell::{
+    attributes::{Attribute, AttributeLoc},
     basic_block::BasicBlock,
     builder::Builder,
     context::Context,
@@ -9,8 +10,10 @@ use inkwell::{
     types::{
         AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, StructType,
     },
-    values::{BasicMetadataValueEnum, BasicValue, BasicValueEnum, PointerValue, AsValueRef, AnyValue},
-    AddressSpace, OptimizationLevel, attributes::{Attribute, AttributeLoc},
+    values::{
+        AnyValue, AsValueRef, BasicMetadataValueEnum, BasicValue, BasicValueEnum, PointerValue,
+    },
+    AddressSpace, OptimizationLevel,
 };
 
 use crate::{
@@ -25,7 +28,10 @@ use crate::{
         statements::Statement,
         types::{Type, TypeKind},
     },
-    visitor::{chainmap::ChainMap, visitor_pattern::{MutVisitorPattern, ExpressionVisitor}},
+    visitor::{
+        chainmap::ChainMap,
+        visitor_pattern::{ExpressionVisitor, MutVisitorPattern},
+    },
 };
 
 pub struct CodeGenVisitor<'a> {
@@ -124,7 +130,6 @@ impl<'a> CodeGenVisitor<'a> {
         }
     }
 
-
     pub fn declare_functions(&mut self, fn_decls: &HashMap<&'a str, (Vec<Type<'a>>, Type<'a>)>) {
         use BasicTypeEnum as BTE;
         for (name, sig) in fn_decls.iter() {
@@ -134,13 +139,19 @@ impl<'a> CodeGenVisitor<'a> {
             for (i, param) in params.iter().enumerate() {
                 let ty = match self.to_llvm_type(param) {
                     BTE::StructType(s) => {
-                        let by_val = self.context.create_type_attribute(Attribute::get_named_enum_kind_id("byval"), s.into());
+                        let by_val = self.context.create_type_attribute(
+                            Attribute::get_named_enum_kind_id("byval"),
+                            s.into(),
+                        );
                         attributed_params.push((i as u32, by_val));
                         let ptr_ty = s.ptr_type(AddressSpace::default());
                         ptr_ty.into()
                     }
                     BTE::ArrayType(a) => {
-                        let by_val = self.context.create_type_attribute(Attribute::get_named_enum_kind_id("byval"), a.into());
+                        let by_val = self.context.create_type_attribute(
+                            Attribute::get_named_enum_kind_id("byval"),
+                            a.into(),
+                        );
                         attributed_params.push((i as u32, by_val));
                         let ptr_ty = a.ptr_type(AddressSpace::default());
                         ptr_ty.into()
@@ -302,9 +313,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                 let res = self.visit_expr(&mut expr.kind).unwrap();
                 let (mut value, lty) = (res.value, res.ty.unwrap());
                 match *expr.kind {
-                    ExprKind::Var(_)
-                    | ExprKind::FieldAccess(_, _)
-                    | ExprKind::ArrayIndex(_, _) => {
+                    ExprKind::Var(_) | ExprKind::FieldAccess(_, _) | ExprKind::ArrayIndex(_, _) => {
                         value = self.builder.build_load(value.into_pointer_value(), "load");
                     }
                     _ => {}

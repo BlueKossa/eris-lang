@@ -1,4 +1,10 @@
-use crate::{visitor::visitor_pattern::{ExpressionVisitor, MutVisitorPattern}, parser::ast::{expressions::ExprKind, types::{TypeKind, Type}}};
+use crate::{
+    parser::ast::{
+        expressions::ExprKind,
+        types::{Type, TypeKind},
+    },
+    visitor::visitor_pattern::{ExpressionVisitor, MutVisitorPattern},
+};
 
 use super::visitor::SemanticVisitor;
 
@@ -111,67 +117,115 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
         }
     }
 
-    fn visit_binary(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_binary(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_unary(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_unary(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_literal(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_literal(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_address_of(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_address_of(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_deref(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_deref(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_array(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_array(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_struct(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_struct(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_field(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_field(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_index(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_index(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_call(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_call(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_if(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_if(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_loop(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_loop(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_assign(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_assign(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_var(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_var(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_break(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_break(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 
-    fn visit_return(&mut self, expr: &mut crate::parser::ast::expressions::ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_return(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
         todo!()
     }
 }
