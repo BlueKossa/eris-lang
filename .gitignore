@@ -2,3 +2,4 @@
 Cargo.lock
 *.o
 *.out
+*.ll
