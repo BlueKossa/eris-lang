@@ -1,6 +1,5 @@
 #[derive(Debug, Clone)]
 pub enum Keyword {
-    Decl,
     Require,
     Return,
     Mut,
@@ -19,7 +18,6 @@ pub enum Keyword {
 impl Keyword {
     pub fn from_str(s: &str) -> Option<Keyword> {
         match s {
-            "decl" => Some(Keyword::Decl),
             "require" => Some(Keyword::Require),
             "return" => Some(Keyword::Return),
             "mut" => Some(Keyword::Mut),
