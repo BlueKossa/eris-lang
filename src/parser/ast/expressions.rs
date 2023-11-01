@@ -1,6 +1,7 @@
 use super::blocks::Block;
 use super::literals::Literal;
 use super::operators::{BinaryOp, UnaryOp};
+use super::types::Type;
 
 #[derive(Debug, Clone)]
 pub enum ExprKind<'a> {
@@ -9,6 +10,7 @@ pub enum ExprKind<'a> {
     Literal(Literal<'a>),
     Address(Expr<'a>),
     Deref(Expr<'a>),
+    Cast(Expr<'a>, Type<'a>),
     Array(Vec<Expr<'a>>),
     StructInit(&'a str, Vec<Expr<'a>>),
     FieldAccess(Expr<'a>, &'a str),
