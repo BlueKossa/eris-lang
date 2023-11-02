@@ -121,7 +121,6 @@ impl<'a> TryFrom<Token<'a>> for BinaryOp {
     }
 }
 
-
 impl std::fmt::Display for BinaryOp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let op = match self {

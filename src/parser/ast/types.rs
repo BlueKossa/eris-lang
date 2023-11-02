@@ -69,7 +69,6 @@ impl<'a> Into<Type<'a>> for TypeKind<'a> {
     }
 }
 
-
 impl<'a> std::fmt::Display for Type<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &*self.kind {

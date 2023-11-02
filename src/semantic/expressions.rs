@@ -35,9 +35,7 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
                     panic!("Expected an address");
                 }
             }
-            ExprKind::Cast(expr, ty) => {
-                Some(ty.to_owned())
-            }
+            ExprKind::Cast(expr, ty) => Some(ty.to_owned()),
             ExprKind::Array(a) => {
                 let ty = self.visit_expr(&mut a[0].kind).unwrap();
                 for expr in a.iter_mut() {

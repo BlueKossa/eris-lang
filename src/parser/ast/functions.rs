@@ -14,7 +14,6 @@ pub struct FnDecl<'a> {
     pub body: Block<'a>,
 }
 
-
 impl<'a> std::fmt::Display for FnDecl<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut function = String::new();
