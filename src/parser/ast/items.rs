@@ -20,3 +20,15 @@ impl<'a> Into<Item<'a>> for ItemKind<'a> {
         Item { kind: self }
     }
 }
+
+impl<'a> std::fmt::Display for Item<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.kind {
+            ItemKind::Function(function) => write!(f, "{}", function),
+            ItemKind::Struct(structure) => write!(f, "{}", structure),
+            ItemKind::Constant(ident, ty, expr) => {
+                write!(f, "const {}: {} = {}", ident, ty, expr)
+            }
+        }
+    }
+}

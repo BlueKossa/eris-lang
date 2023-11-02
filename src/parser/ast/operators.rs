@@ -120,3 +120,40 @@ impl<'a> TryFrom<Token<'a>> for BinaryOp {
         };
     }
 }
+
+
+impl std::fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let op = match self {
+            BinaryOp::Add => "+",
+            BinaryOp::Subtract => "-",
+            BinaryOp::Multiply => "*",
+            BinaryOp::Divide => "/",
+            BinaryOp::Modulo => "%",
+            BinaryOp::Equal => "==",
+            BinaryOp::NotEqual => "!=",
+            BinaryOp::LessThan => "<",
+            BinaryOp::LessThanEqual => "<=",
+            BinaryOp::GreaterThan => ">",
+            BinaryOp::GreaterThanEqual => ">=",
+            BinaryOp::And => "&&",
+            BinaryOp::Or => "||",
+            BinaryOp::Assign => "=",
+            BinaryOp::AddAssign => "+=",
+            BinaryOp::SubtractAssign => "-=",
+            BinaryOp::MultiplyAssign => "*=",
+            BinaryOp::DivideAssign => "/=",
+            BinaryOp::ModuloAssign => "%=",
+        };
+        write!(f, "{}", op)
+    }
+}
+
+impl std::fmt::Display for UnaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnaryOp::Negate => write!(f, "-"),
+            UnaryOp::Not => write!(f, "!"),
+        }
+    }
+}

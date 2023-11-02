@@ -30,3 +30,14 @@ impl<'a> Literal<'a> {
         .into()
     }
 }
+
+impl<'a> std::fmt::Display for Literal<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            LiteralKind::Int(int) => write!(f, "{}", int),
+            LiteralKind::Float(float) => write!(f, "{}", float),
+            LiteralKind::String(string) => write!(f, "{}", string),
+            LiteralKind::Bool(boolean) => write!(f, "{}", boolean),
+        }
+    }
+}

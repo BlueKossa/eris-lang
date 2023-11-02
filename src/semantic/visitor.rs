@@ -75,6 +75,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
 
     fn traverse_function(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
         let sig = &mut function.sig;
+        println!("sig: {:?}", sig);
         let args = sig
             .args
             .iter()

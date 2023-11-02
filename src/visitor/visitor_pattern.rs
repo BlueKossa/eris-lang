@@ -34,6 +34,7 @@ pub trait ExpressionVisitor<'a> {
     fn visit_literal(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType;
     fn visit_address_of(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType;
     fn visit_deref(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType;
+    fn visit_cast(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType;
     fn visit_array(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType;
     fn visit_struct(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType;
     fn visit_field(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType;

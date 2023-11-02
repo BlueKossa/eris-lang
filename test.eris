@@ -1,6 +1,41 @@
-main :: () : i32 {
-    a := [69, 420];
-    b := a[0];
-    printf("%d\n", b);
-    return 0;
+Vec2 :: struct {
+    x: i32,
+    y: i32,
 }
+
+mult_vec :: (vec: &Vec2, scalar: i32) {
+    vec.x *= scalar;
+    vec.y *= scalar;
+}
+
+
+create_array :: i32[2](a: i32, b: i32) {
+    arr := [a, b];
+    return arr;
+}
+
+print_array :: (a: i32[2]) {
+    printf("[%d, %d]", a[0], a[1]);
+}
+
+
+main :: i32() {
+    v := Vec2 { 69, 420 };
+    a := create_array(3, 2);
+    print_array(a);
+    return 1;
+}
+
+mult_arr :: (array: &i32[2], scalar: i32) {
+    array[0] *= scalar;
+    array[1] *= scalar;
+}
+
+double :: (a: &i32) {
+    a = a * 2;
+}
+
+print_vec :: (vec: Vec2) {
+    printf("%d, %d\n", vec.x, vec.y);
+}
+

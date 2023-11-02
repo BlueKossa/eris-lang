@@ -63,7 +63,7 @@ impl<'a> CodeGenVisitor<'a> {
         }
     }
 
-    fn to_llvm_type(&self, ty: &Type<'a>) -> BasicTypeEnum<'a> {
+    pub(super) fn to_llvm_type(&self, ty: &Type<'a>) -> BasicTypeEnum<'a> {
         match &*ty.kind {
             TypeKind::I8 => self.context.i8_type().into(),
             TypeKind::I16 => self.context.i16_type().into(),
@@ -93,6 +93,7 @@ impl<'a> CodeGenVisitor<'a> {
             TypeKind::Array(ty, len) => {
                 let ty = self.to_llvm_type(ty);
                 let arr_ty = ty.array_type(*len as u32);
+                dbg!(arr_ty.as_basic_type_enum());
                 arr_ty.into()
             }
             // TODO: Fix this, void is not supposed to be an int
@@ -110,7 +111,7 @@ impl<'a> CodeGenVisitor<'a> {
         ty: &Type<'a>,
         args: &[BasicMetadataTypeEnum<'a>],
     ) -> FunctionType<'a> {
-        match *ty.kind {
+        match &*ty.kind {
             TypeKind::I32 => self.context.i32_type().fn_type(args, false),
             TypeKind::I64 => self.context.i64_type().fn_type(args, false),
             TypeKind::F32 => self.context.f32_type().fn_type(args, false),
@@ -125,6 +126,11 @@ impl<'a> CodeGenVisitor<'a> {
                 } else {
                     todo!()
                 }
+            }
+            TypeKind::Array(ty, len) => {
+                let ty = self.to_llvm_type(ty);
+                let arr_ty = ty.array_type(*len as u32);
+                arr_ty.fn_type(args, false)
             }
             _ => todo!(),
         }
@@ -307,10 +313,13 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
 
     fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
         let ty = self.to_llvm_type(local.ty.as_ref().unwrap());
+        println!("ty: {:?}", ty);
+        println!("local: {:?}", local.ty);
         let (value, lty) = match local.value {
             Some(ref mut expr) => {
                 let res = self.visit_expr(&mut expr.kind).unwrap();
                 let (mut value, lty) = (res.value, res.ty.unwrap());
+                println!("val: {}, ty: {}", local.ident, lty);
                 match *expr.kind {
                     ExprKind::Var(_) | ExprKind::FieldAccess(_, _) | ExprKind::ArrayIndex(_, _) => {
                         let ptr = value.into_pointer_value();
@@ -393,7 +402,8 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         self.values.insert_map();
         for (i, arg) in sig.args.iter().enumerate() {
             let a = func.get_nth_param(i as u32).unwrap();
-            self.values.insert(arg.0, (a, a.get_type()));
+            dbg!(self.to_llvm_type(&arg.1));
+            self.values.insert(arg.0, (a, self.to_llvm_type(&arg.1)));
         }
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);

@@ -34,6 +34,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             ExprKind::Literal(_) => self.visit_literal(expr),
             ExprKind::Address(_) => self.visit_address_of(expr),
             ExprKind::Deref(_) => self.visit_deref(expr),
+            ExprKind::Cast(_, _) => self.visit_cast(expr),
             ExprKind::Array(_) => self.visit_array(expr),
             ExprKind::StructInit(_, _) => self.visit_struct(expr),
             ExprKind::FieldAccess(_, _) => self.visit_field(expr),
@@ -243,6 +244,28 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
+    fn visit_cast(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+        create_local_tuple!(Cast, expr, expr, ty);
+
+        let expr = self.visit_expr(&mut expr.kind).unwrap();
+        let val = expr.value;
+        let ty = self.to_llvm_type(ty).into_int_type();
+
+        let val = if let BasicValueEnum::PointerValue(ptr) = val {
+            self.builder.build_load(ptr, "load").unwrap()
+        } else {
+            val
+        };
+        let val = self
+            .builder
+            .build_int_cast(val.into_int_value(), ty, "cast")
+            .unwrap();
+        Some(CodeGenResult {
+            value: val.into(),
+            ty: Some(ty.into()),
+        })
+    }
+
     fn visit_array(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
         create_local_tuple!(Array, expr, exprs);
         // Constant arrays
@@ -303,6 +326,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                 self.builder.build_store(ptr, val).unwrap();
             }
         }
+        println!("ARRAY TYPE: {:?}", array_type);
         Some(CodeGenResult {
             value: array_alloc.into(),
             ty: Some(array_type.into()),
@@ -348,16 +372,15 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let ty = if let BasicTypeEnum::StructType(ty) = struct_ty {
             ty
         } else {
-            //struct_ty
-            //    .into_pointer_type()
-            //    .get_element_type()
-            //    .into_struct_type()
-            panic!("LLVM15 BROKE THIS, FIX LATER")
+            struct_ty
+                .into_pointer_type()
+                .get_element_type()
+                .into_struct_type()
         };
 
         let struct_name = ty.get_name().unwrap();
         let fields = self.structs.get(struct_name.to_str().unwrap()).unwrap();
-        let field_index: _ = fields.get(field).unwrap();
+        let field_index = fields.get(field).unwrap();
         let field_type = ty.get_field_type_at_index(*field_index as u32).unwrap();
         let field_ptr = self
             .builder
@@ -374,12 +397,21 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let array = self.visit_expr(&mut array.kind).unwrap();
         let array_val = array.value;
         let array_ty = array.ty.unwrap();
+        println!("array_ty: {:?}", array_ty);
         let array_ptr = if let BasicValueEnum::PointerValue(ptr) = array_val {
             ptr
         } else {
             self.builder.build_alloca(array_ty, "array").unwrap()
         };
-        let ty = array_ty.into_array_type();
+        let ty = if let BasicTypeEnum::ArrayType(ty) = array_ty {
+            ty
+        } else {
+            array_ty
+                .into_pointer_type()
+                .get_element_type()
+                .into_array_type()
+        };
+
         let elem_ty = ty.get_element_type();
 
         let index = self.visit_expr(&mut index.kind).unwrap();
@@ -422,6 +454,18 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                     let ptr = val.into_pointer_value();
                     (self.builder.build_load(ptr, "load").unwrap(), ty)
                 }
+                ExprKind::Var(_) => {
+                    let res = self.visit_expr(&mut param.kind).unwrap();
+                    let (val, ty) = (res.value, res.ty.unwrap());
+                    match ty {
+                        BasicTypeEnum::StructType(_) => (val, ty),
+                        BasicTypeEnum::ArrayType(_) => (val, ty),
+                        _ => {
+                            let ptr = val.into_pointer_value();
+                            (self.builder.build_load(ptr, "load").unwrap(), ty)
+                        }
+                    }
+                }
                 _ => {
                     let res = self.visit_expr(&mut param.kind).unwrap();
                     (res.value, res.ty.unwrap())
@@ -429,9 +473,12 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             };
             let val = match param_ty {
                 BasicTypeEnum::StructType(s) => {
+                    println!("STRUCT");
                     if let ExprKind::Address(_) = *param.kind {
+                        println!("ADDR");
                         param_val
                     } else {
+                        println!("NOT ADDR");
                         let by_val = self.context.create_type_attribute(
                             Attribute::get_named_enum_kind_id("byval"),
                             s.into(),
@@ -449,6 +496,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let call = self.builder.build_call(func, &args, "call").unwrap();
 
         for (i, attr) in attributed_params.drain(..) {
+            println!("attributing param {}", i);
             call.add_attribute(AttributeLoc::Param(i), attr);
         }
 
@@ -535,6 +583,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
     fn visit_var(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
         create_local_tuple!(Var, expr, ident);
         let val = self.values.get(ident).unwrap();
+
         Some(CodeGenResult {
             value: val.0,
             ty: Some(val.1),

@@ -35,6 +35,9 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
                     panic!("Expected an address");
                 }
             }
+            ExprKind::Cast(expr, ty) => {
+                Some(ty.to_owned())
+            }
             ExprKind::Array(a) => {
                 let ty = self.visit_expr(&mut a[0].kind).unwrap();
                 for expr in a.iter_mut() {
@@ -71,9 +74,15 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
                 }
             }
             ExprKind::ArrayIndex(array, _index) => {
-                //TODO
-                if let TypeKind::Array(ty, _) = *self.visit_expr(&mut array.kind).unwrap().kind {
+                let ty = self.visit_expr(&mut array.kind).unwrap();
+                if let TypeKind::Array(ty, _) = *ty.kind {
                     Some(ty)
+                } else if let TypeKind::Ref(ty) = *ty.kind {
+                    if let TypeKind::Array(ty, _) = *ty.kind {
+                        Some(ty)
+                    } else {
+                        panic!("Expected array type");
+                    }
                 } else {
                     panic!("Expected array type");
                 }
@@ -101,14 +110,17 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
                     return Some(TypeKind::Void.into());
                 }
                 let (param_types, fn_type) = res.unwrap().to_owned();
+                println!("param_types: {:?}", param_types);
+                println!("fn_type: {:?}", fn_type);
                 for (i, expr) in params.iter_mut().enumerate() {
                     let ty1 = self.visit_expr(&mut expr.kind).unwrap();
                     let ty2 = param_types.get(i).unwrap();
                     self.type_check(&ty1, ty2);
                 }
+                println!("fn_type: {:?}", fn_type);
                 Some(fn_type.to_owned())
             }
-            ExprKind::Var(v) => Some(self.values.get(v).unwrap().to_owned()),
+            ExprKind::Var(v) => Some(self.values.get(v).expect(v).to_owned()),
             ExprKind::Break => {
                 //TODO: Check if break is inside a loop
                 None
@@ -146,6 +158,13 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
     }
 
     fn visit_deref(
+        &mut self,
+        expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
+    ) -> Self::ExprReturnType {
+        todo!()
+    }
+
+    fn visit_cast(
         &mut self,
         expr: &mut crate::parser::ast::expressions::ExprKind<'a>,
     ) -> Self::ExprReturnType {

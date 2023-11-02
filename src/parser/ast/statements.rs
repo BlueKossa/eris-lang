@@ -8,3 +8,13 @@ pub enum Statement<'a> {
     Item(Item<'a>),
     Expression(Expr<'a>),
 }
+
+impl<'a> std::fmt::Display for Statement<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Statement::Local(local) => write!(f, "{}", local),
+            Statement::Item(item) => write!(f, "{}", item),
+            Statement::Expression(expr) => write!(f, "{}", expr),
+        }
+    }
+}

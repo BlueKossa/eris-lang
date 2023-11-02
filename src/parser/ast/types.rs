@@ -68,3 +68,31 @@ impl<'a> Into<Type<'a>> for TypeKind<'a> {
         }
     }
 }
+
+
+impl<'a> std::fmt::Display for Type<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &*self.kind {
+            TypeKind::Void => write!(f, "void"),
+            TypeKind::I8 => write!(f, "i8"),
+            TypeKind::I16 => write!(f, "i16"),
+            TypeKind::I32 => write!(f, "i32"),
+            TypeKind::I64 => write!(f, "i64"),
+            TypeKind::I128 => write!(f, "i128"),
+            TypeKind::U8 => write!(f, "u8"),
+            TypeKind::U16 => write!(f, "u16"),
+            TypeKind::U32 => write!(f, "u32"),
+            TypeKind::U64 => write!(f, "u64"),
+            TypeKind::U128 => write!(f, "u128"),
+            TypeKind::F32 => write!(f, "f32"),
+            TypeKind::F64 => write!(f, "f64"),
+            TypeKind::F128 => write!(f, "f128"),
+            TypeKind::Bool => write!(f, "bool"),
+            TypeKind::Char => write!(f, "char"),
+            TypeKind::Str => write!(f, "str"),
+            TypeKind::Array(t, s) => write!(f, "[{}; {}]", t, s),
+            TypeKind::Struct(name) => write!(f, "struct({})", name),
+            TypeKind::Ref(t) => write!(f, "&{}", t),
+        }
+    }
+}
