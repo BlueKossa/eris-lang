@@ -92,7 +92,8 @@ impl<'a> CodeGenVisitor<'a> {
                 .into(),
             TypeKind::Array(ty, len) => {
                 let ty = self.to_llvm_type(ty);
-                let arr_ty = ty.array_type(*len as u32);
+                // NULL TERMINATED = +1 len
+                let arr_ty = ty.array_type(*len as u32 + 1);
                 dbg!(arr_ty.as_basic_type_enum());
                 arr_ty.into()
             }

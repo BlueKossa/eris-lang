@@ -289,7 +289,8 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         // return 0;
         let elem_ty = self.visit_expr(&mut exprs[0].kind).unwrap().ty.unwrap();
         let len = exprs.len() as u32;
-        let array_type = elem_ty.array_type(len);
+        // NULL terminated array
+        let array_type = elem_ty.array_type(len + 1);
         let array_alloc = self.builder.build_alloca(array_type, "array").unwrap();
         //let array_val = self
         //    .builder
@@ -325,6 +326,23 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                     .unwrap();
                 self.builder.build_store(ptr, val).unwrap();
             }
+        }
+        // Append null byte to last element
+        unsafe {
+            let ptr = self
+                .builder
+                .build_in_bounds_gep(
+                    array_alloc,
+                    &[
+                        self.context.i32_type().const_int(0, false),
+                        self.context.i32_type().const_int(len as u64, false),
+                    ],
+                    "ptr",
+                )
+                .unwrap();
+            self.builder
+                .build_store(ptr, elem_ty.const_zero())
+                .unwrap();
         }
         println!("ARRAY TYPE: {:?}", array_type);
         Some(CodeGenResult {
