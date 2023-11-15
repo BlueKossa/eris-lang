@@ -1,7 +1,7 @@
 use std::{iter::Peekable, str::Chars};
 
 use super::literal::{Literal, Number};
-use super::symbol::Symbol;
+
 use super::token::Token;
 
 pub type LexResult<'a> = Result<Token<'a>, String>;

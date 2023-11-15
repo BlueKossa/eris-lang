@@ -8,10 +8,10 @@ use inkwell::{
     module::Module,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{
-        AnyTypeEnum, BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, StructType,
+        BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType,
     },
     values::{
-        AnyValue, AsValueRef, BasicMetadataValueEnum, BasicValue, BasicValueEnum, PointerValue,
+        BasicValue, BasicValueEnum,
     },
     AddressSpace, OptimizationLevel,
 };
@@ -22,9 +22,7 @@ use crate::{
         expressions::ExprKind,
         functions::FnDecl,
         items::{Item, ItemKind},
-        literals::{Literal, LiteralKind},
         locals::Local,
-        operators::{BinaryOp, UnaryOp},
         statements::Statement,
         types::{Type, TypeKind},
     },

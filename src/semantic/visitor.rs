@@ -105,8 +105,8 @@ impl<'a> SemanticVisitor<'a> {
     }
 
     pub(super) fn type_check(&self, a: &Type, b: &Type) {
-        let mut ty1 = a;
-        let mut ty2 = b;
+        let _ty1 = a;
+        let _ty2 = b;
         // TODO: Review
         //loop {
         //    match (*ty1.kind.to_owned(), *ty2.kind.to_owned()) {

@@ -5,10 +5,10 @@ mod semantic;
 mod visitor;
 
 use inkwell::context::Context;
-use lexer::lexer::LexResult;
-use lexer::token::Token;
+
+
 use parser::ast::blocks::Block;
-use parser::ast::statements::Statement;
+
 use semantic::visitor::SemanticVisitor;
 
 use crate::codegen::visitor::CodeGenVisitor;
