@@ -1,3 +1,4 @@
+use super::blocks::Block;
 use super::expressions::Expr;
 use super::functions::FnDecl;
 use super::structs::Struct;
@@ -13,6 +14,7 @@ pub enum ItemKind<'a> {
     Function(FnDecl<'a>),
     Struct(Struct<'a>),
     Constant(&'a str, Type<'a>, Expr<'a>),
+    Foreign(Block<'a>),
 }
 
 impl<'a> Into<Item<'a>> for ItemKind<'a> {
@@ -29,6 +31,7 @@ impl<'a> std::fmt::Display for Item<'a> {
             ItemKind::Constant(ident, ty, expr) => {
                 write!(f, "const {}: {} = {}", ident, ty, expr)
             }
+            ItemKind::Foreign(block) => write!(f, "foreign {}", block),
         }
     }
 }

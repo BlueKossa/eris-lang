@@ -8,7 +8,7 @@ use inkwell::{
     module::Module,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{
-        BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType,
+        BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, MetadataType,
     },
     values::{
         BasicValue, BasicValueEnum,
@@ -20,7 +20,7 @@ use crate::{
     parser::ast::{
         blocks::Block,
         expressions::ExprKind,
-        functions::FnDecl,
+        functions::{FnDecl, FnSig},
         items::{Item, ItemKind},
         locals::Local,
         statements::Statement,
@@ -109,19 +109,20 @@ impl<'a> CodeGenVisitor<'a> {
         &self,
         ty: &Type<'a>,
         args: &[BasicMetadataTypeEnum<'a>],
+        variadic: bool,
     ) -> FunctionType<'a> {
         match &*ty.kind {
-            TypeKind::I32 => self.context.i32_type().fn_type(args, false),
-            TypeKind::I64 => self.context.i64_type().fn_type(args, false),
-            TypeKind::F32 => self.context.f32_type().fn_type(args, false),
-            TypeKind::F64 => self.context.f64_type().fn_type(args, false),
-            TypeKind::Bool => self.context.bool_type().fn_type(args, false),
-            TypeKind::Char => self.context.i8_type().fn_type(args, false),
-            TypeKind::Void => self.context.void_type().fn_type(args, false),
+            TypeKind::I32 => self.context.i32_type().fn_type(args, variadic),
+            TypeKind::I64 => self.context.i64_type().fn_type(args, variadic),
+            TypeKind::F32 => self.context.f32_type().fn_type(args, variadic),
+            TypeKind::F64 => self.context.f64_type().fn_type(args, variadic),
+            TypeKind::Bool => self.context.bool_type().fn_type(args, variadic),
+            TypeKind::Char => self.context.i8_type().fn_type(args, variadic),
+            TypeKind::Void => self.context.void_type().fn_type(args, variadic),
             TypeKind::Struct(ident) => {
                 let struct_ty = self.module.get_struct_type(ident);
                 if let Some(struct_ty) = struct_ty {
-                    struct_ty.fn_type(args, false)
+                    struct_ty.fn_type(args, variadic)
                 } else {
                     todo!()
                 }
@@ -130,20 +131,19 @@ impl<'a> CodeGenVisitor<'a> {
                 let ty = self.to_llvm_type(ty);
                 // NULL TERMINATED = +1 len
                 let arr_ty = ty.array_type(*len as u32 + 1);
-                arr_ty.fn_type(args, false)
+                arr_ty.fn_type(args, variadic)
             }
             _ => todo!(),
         }
     }
 
-    pub fn declare_functions(&mut self, fn_decls: &HashMap<&'a str, (Vec<Type<'a>>, Type<'a>)>) {
+    pub fn declare_functions(&mut self, fn_decls: &HashMap<&'a str, FnSig<'a>>) {
         use BasicTypeEnum as BTE;
-        for (name, sig) in fn_decls.iter() {
+        for (name, sig) in fn_decls {
             let mut param_types: Vec<BasicMetadataTypeEnum> = Vec::new();
             let mut attributed_params = Vec::new();
-            let (params, ret_ty) = sig;
-            for (i, param) in params.iter().enumerate() {
-                let ty = match self.to_llvm_type(param) {
+            for (i, (_name, ty)) in sig.args.iter().enumerate() {
+                let ty = match self.to_llvm_type(ty) {
                     BTE::StructType(s) => {
                         let by_val = self.context.create_type_attribute(
                             Attribute::get_named_enum_kind_id("byval"),
@@ -163,13 +163,13 @@ impl<'a> CodeGenVisitor<'a> {
                         ptr_ty.into()
                     }
                     _ => {
-                        let ty = self.to_llvm_type(param);
+                        let ty = self.to_llvm_type(ty);
                         ty
                     }
                 };
                 param_types.push(ty.into());
             }
-            let fn_type = self.to_llvm_fn_type(ret_ty, &param_types);
+            let fn_type = self.to_llvm_fn_type(&sig.ret, &param_types, sig.is_variadic);
 
             let func = self.module.add_function(name, fn_type, None);
             for (i, attr) in attributed_params.drain(..) {
@@ -181,7 +181,7 @@ impl<'a> CodeGenVisitor<'a> {
     pub fn create_clib_functions(&mut self) {
         let i32_type = self.context.i32_type();
         let char_type = self.context.i8_type().ptr_type(AddressSpace::default());
-        let fn_ty = i32_type.fn_type(&[char_type.into()], false);
+        let fn_ty = i32_type.fn_type(&[char_type.into()], true);
         self.module.add_function("printf", fn_ty, None);
         let fn_ty = i32_type.fn_type(&[i32_type.into()], false);
         self.module.add_function("putchar", fn_ty, None);
@@ -393,11 +393,17 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             }
             ItemKind::Struct(_) => {}
             ItemKind::Constant(_, _, _) => todo!(),
+            ItemKind::Foreign(b) => {
+                self.traverse_block(b);
+            }
         }
         None
     }
 
     fn traverse_function(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
+        if function.body.statements.is_empty() {
+            return None;
+        }
         let sig = &function.sig;
         let func = self.module.get_function(function.name).unwrap();
         self.values.insert_map();

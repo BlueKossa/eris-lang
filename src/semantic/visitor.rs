@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use crate::parser::ast::functions::FnDecl;
+use crate::parser::ast::functions::{FnDecl, FnSig};
 use crate::parser::ast::items::Item;
-use crate::parser::ast::items::ItemKind::{Constant, Function, Struct};
 use crate::parser::ast::locals::Local;
 use crate::parser::ast::statements::Statement;
 use crate::parser::ast::types::{Type, TypeKind};
@@ -12,7 +11,7 @@ use crate::{parser::ast::blocks::Block, visitor::visitor_pattern::MutVisitorPatt
 
 pub struct SemanticVisitor<'a> {
     pub(super) values: ChainMap<&'a str, Type<'a>>,
-    pub(crate) fn_decls: HashMap<&'a str, (Vec<Type<'a>>, Type<'a>)>,
+    pub(crate) fn_decls: HashMap<&'a str, FnSig<'a>>,
     pub(crate) structs: HashMap<&'a str, Vec<(&'a str, Type<'a>)>>,
 }
 
@@ -58,9 +57,10 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
     }
 
     fn traverse_item(&mut self, item: &mut Item<'a>) -> Self::ReturnType {
+        use crate::parser::ast::items::ItemKind as IK;
         match &mut item.kind {
-            Function(decl) => self.traverse_function(decl),
-            Struct(s) => {
+            IK::Function(decl) => self.traverse_function(decl),
+            IK::Struct(s) => {
                 let fields = s
                     .fields
                     .iter()
@@ -69,20 +69,16 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 self.structs.insert(s.name, fields);
                 None
             }
-            Constant(_, _, _) => todo!(),
+            IK::Constant(_, _, _) => todo!(),
+            IK::Foreign(b) => self.traverse_block(b),
         }
     }
 
-    fn traverse_function(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
+    fn traverse_function<'b>(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
         let sig = &mut function.sig;
         println!("sig: {:?}", sig);
-        let args = sig
-            .args
-            .iter()
-            .map(|(_name, ty)| ty.to_owned())
-            .collect::<Vec<_>>();
         self.fn_decls
-            .insert(function.name, (args, sig.ret.to_owned()));
+            .insert(function.name, sig.clone());
         for (name, ty) in sig.args.iter() {
             self.values.insert(name, ty.to_owned());
         }

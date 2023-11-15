@@ -13,6 +13,7 @@ pub enum Keyword {
     Match,
     Struct,
     Union,
+    Foreign,
 }
 
 impl Keyword {
@@ -31,6 +32,7 @@ impl Keyword {
             "match" => Some(Keyword::Match),
             "struct" => Some(Keyword::Struct),
             "union" => Some(Keyword::Union),
+            "foreign" => Some(Keyword::Foreign),
             _ => None,
         }
     }

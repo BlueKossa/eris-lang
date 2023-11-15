@@ -433,6 +433,11 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         let body = self.parse_block()?;
                         return Ok(Statement::Expression(ExprKind::If(cond, body).into()));
                     }
+                    Foreign => {
+                        self.eat()?;
+                        let block = self.parse_block()?;
+                        return Ok(Statement::Item(ItemKind::Foreign(block).into()));
+                    }
                     _ => {
                         return Err(ParseError {
                             kind: ParseErrorKind::UnexpectedToken(self.peek()?),
@@ -585,6 +590,15 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     self.eat()?;
                     break;
                 }
+                Token::Symbol(Ellipsis) => {
+                    self.eat()?;
+                    self.eat()?;
+                    return Ok(FnSig {
+                        args,
+                        ret,
+                        is_variadic: true,
+                    });
+                }
                 t => {
                     return Err(ParseError {
                         kind: ParseErrorKind::UnexpectedToken(t),
@@ -593,7 +607,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             }
         }
 
-        Ok(FnSig { args, ret })
+        Ok(FnSig { args, ret, is_variadic: false })
     }
 
     fn parse_fn_decl(&mut self, name: &'a str, fn_type: Type<'a>) -> ParseResult<'a, FnDecl<'a>> {
@@ -608,12 +622,19 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         }
 
         let block;
-        if let Token::Symbol(BraceOpen) = self.peek()? {
-            block = self.parse_block()?;
-        } else {
-            return Err(ParseError {
-                kind: ParseErrorKind::UnexpectedToken(self.peek()?),
-            });
+        match self.peek()? {
+            Token::Symbol(BraceOpen) => {
+                block = self.parse_block()?;
+            }
+            Token::Symbol(Semicolon) => {
+                self.eat()?;
+                block = Block { statements: Vec::new() };
+            }
+            t => {
+                return Err(ParseError {
+                    kind: ParseErrorKind::UnexpectedToken(t),
+                })
+            }
         }
         Ok(FnDecl {
             sig,

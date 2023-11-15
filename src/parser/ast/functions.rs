@@ -5,6 +5,7 @@ use super::types::Type;
 pub struct FnSig<'a> {
     pub ret: Type<'a>,
     pub args: Vec<(&'a str, Type<'a>)>,
+    pub is_variadic: bool,
 }
 
 #[derive(Debug, Clone)]

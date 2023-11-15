@@ -107,16 +107,13 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
                 if res.is_none() {
                     return Some(TypeKind::Void.into());
                 }
-                let (param_types, fn_type) = res.unwrap().to_owned();
-                println!("param_types: {:?}", param_types);
-                println!("fn_type: {:?}", fn_type);
+                let sig = res.unwrap().to_owned();
                 for (i, expr) in params.iter_mut().enumerate() {
                     let ty1 = self.visit_expr(&mut expr.kind).unwrap();
-                    let ty2 = param_types.get(i).unwrap();
-                    self.type_check(&ty1, ty2);
+                    let ty2 = &sig.args.get(i).unwrap().1;
+                    self.type_check(&ty1, &ty2);
                 }
-                println!("fn_type: {:?}", fn_type);
-                Some(fn_type.to_owned())
+                Some(sig.ret.to_owned())
             }
             ExprKind::Var(v) => Some(self.values.get(v).expect(v).to_owned()),
             ExprKind::Break => {

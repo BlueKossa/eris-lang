@@ -49,6 +49,8 @@ pub enum Symbol {
 
     ColonColon,
     DotAsterisk,
+
+    Ellipsis,
 }
 
 impl FromStr for Symbol {
@@ -103,6 +105,8 @@ impl FromStr for Symbol {
 
             "::" => Ok(Symbol::ColonColon),
             ".*" => Ok(Symbol::DotAsterisk),
+
+            "..." => Ok(Symbol::Ellipsis),
 
             _ => Err(format!("Invalid symbol: {}", s)),
         }
