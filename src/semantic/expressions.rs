@@ -108,7 +108,12 @@ impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
                     return Some(TypeKind::Void.into());
                 }
                 let sig = res.unwrap().to_owned();
+                let count = sig.args.len();
+                let is_variadic = sig.is_variadic;
                 for (i, expr) in params.iter_mut().enumerate() {
+                    if i >= count && is_variadic {
+                        break;
+                    }
                     let ty1 = self.visit_expr(&mut expr.kind).unwrap();
                     let ty2 = &sig.args.get(i).unwrap().1;
                     self.type_check(&ty1, &ty2);
