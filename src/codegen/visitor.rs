@@ -178,15 +178,6 @@ impl<'a> CodeGenVisitor<'a> {
         }
     }
 
-    pub fn create_clib_functions(&mut self) {
-        let i32_type = self.context.i32_type();
-        let char_type = self.context.i8_type().ptr_type(AddressSpace::default());
-        let fn_ty = i32_type.fn_type(&[char_type.into()], true);
-        self.module.add_function("printf", fn_ty, None);
-        let fn_ty = i32_type.fn_type(&[i32_type.into()], false);
-        self.module.add_function("putchar", fn_ty, None);
-    }
-
     pub fn declare_structs(&mut self, structs: &HashMap<&'a str, Vec<(&'a str, Type<'a>)>>) {
         // Add all structs to the module
         for (name, _) in structs.iter() {

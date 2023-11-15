@@ -45,7 +45,6 @@ fn main() {
     let mut codegen_visitor = CodeGenVisitor::new(&ctx, "main");
     codegen_visitor.declare_structs(&structs);
     codegen_visitor.declare_functions(&fn_decls);
-    codegen_visitor.create_clib_functions();
     codegen_visitor.run(&mut block);
     codegen_visitor.dump();
     codegen_visitor.dump_file("tst.ll");
