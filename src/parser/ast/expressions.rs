@@ -94,7 +94,7 @@ impl<'a> std::fmt::Display for Expr<'a> {
             }
             ExprKind::MethodCall(_, _, _) => todo!(),
             ExprKind::If(_, _) => todo!(),
-            ExprKind::Loop(_, _) => todo!(),
+            ExprKind::Loop(_, _) => write!(f, "loop"),
             ExprKind::Assign(lhs, rhs) => {
                 write!(f, "{} = {}", lhs, rhs)
             }

@@ -130,7 +130,8 @@ impl<'a> CodeGenVisitor<'a> {
             }
             TypeKind::Array(ty, len) => {
                 let ty = self.to_llvm_type(ty);
-                let arr_ty = ty.array_type(*len as u32);
+                // NULL TERMINATED = +1 len
+                let arr_ty = ty.array_type(*len as u32 + 1);
                 arr_ty.fn_type(args, false)
             }
             _ => todo!(),
@@ -320,7 +321,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             Some(ref mut expr) => {
                 let res = self.visit_expr(&mut expr.kind).unwrap();
                 let (mut value, lty) = (res.value, res.ty.unwrap());
-                println!("val: {}, ty: {}", local.ident, lty);
+                println!("name: {}, ty: {:?}", local.ident, lty);
                 match *expr.kind {
                     ExprKind::Var(_) | ExprKind::FieldAccess(_, _) | ExprKind::ArrayIndex(_, _) => {
                         let ptr = value.into_pointer_value();
@@ -328,6 +329,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     }
                     _ => {}
                 }
+                println!("ty: {:?}, lty: {:?}", ty, lty);
                 if ty != lty {
                     let value = value.into_int_value().const_cast(ty.into_int_type(), false);
                     (value.into(), ty)

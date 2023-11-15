@@ -340,11 +340,9 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                     "ptr",
                 )
                 .unwrap();
-            self.builder
-                .build_store(ptr, elem_ty.const_zero())
-                .unwrap();
+            self.builder.build_store(ptr, elem_ty.const_zero()).unwrap();
         }
-        println!("ARRAY TYPE: {:?}", array_type);
+
         Some(CodeGenResult {
             value: array_alloc.into(),
             ty: Some(array_type.into()),
@@ -415,7 +413,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let array = self.visit_expr(&mut array.kind).unwrap();
         let array_val = array.value;
         let array_ty = array.ty.unwrap();
-        println!("array_ty: {:?}", array_ty);
+
         let array_ptr = if let BasicValueEnum::PointerValue(ptr) = array_val {
             ptr
         } else {
@@ -491,12 +489,9 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
             };
             let val = match param_ty {
                 BasicTypeEnum::StructType(s) => {
-                    println!("STRUCT");
                     if let ExprKind::Address(_) = *param.kind {
-                        println!("ADDR");
                         param_val
                     } else {
-                        println!("NOT ADDR");
                         let by_val = self.context.create_type_attribute(
                             Attribute::get_named_enum_kind_id("byval"),
                             s.into(),
@@ -514,7 +509,6 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let call = self.builder.build_call(func, &args, "call").unwrap();
 
         for (i, attr) in attributed_params.drain(..) {
-            println!("attributing param {}", i);
             call.add_attribute(AttributeLoc::Param(i), attr);
         }
 
