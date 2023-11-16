@@ -283,8 +283,8 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 let ty = self.parse_type()?;
                 Ok(Type::ref_type(ty))
             }
-            _ => Err(ParseError {
-                kind: ParseErrorKind::UnexpectedToken(self.peek()?),
+            t => Err(ParseError {
+                kind: ParseErrorKind::UnexpectedToken(t),
             }),
         };
 
@@ -472,8 +472,13 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                                     _ => {}
                                 }
                                 let ty = self.parse_type()?;
-                                dbg!(&ty);
-                                dbg!(self.peek()?);
+                                if let Token::Symbol(ParenOpen) = self.peek()? {
+                                    let func = self.parse_fn_decl(ident, ty)?;
+                                    return Ok(Statement::Item(ItemKind::Function(func).into()));
+                                }
+                            }
+                            Token::Symbol(And) => {
+                                let ty = self.parse_type()?;
                                 if let Token::Symbol(ParenOpen) = self.peek()? {
                                     let func = self.parse_fn_decl(ident, ty)?;
                                     return Ok(Statement::Item(ItemKind::Function(func).into()));

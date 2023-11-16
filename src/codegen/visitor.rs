@@ -133,6 +133,10 @@ impl<'a> CodeGenVisitor<'a> {
                 let arr_ty = ty.array_type(*len as u32 + 1);
                 arr_ty.fn_type(args, variadic)
             }
+            TypeKind::Ref(ty) => {
+                let ty = self.to_llvm_type(ty);
+                ty.ptr_type(AddressSpace::default()).fn_type(args, variadic)
+            }
             _ => todo!(),
         }
     }
