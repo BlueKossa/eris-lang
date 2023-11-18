@@ -6,7 +6,7 @@ use crate::{
     visitor::visitor_pattern::{ExpressionVisitor, MutVisitorPattern},
 };
 
-use super::visitor::SemanticVisitor;
+use super::semantic_visitor::SemanticVisitor;
 
 impl<'a> ExpressionVisitor<'a> for SemanticVisitor<'a> {
     type ExprReturnType = Option<Type<'a>>;

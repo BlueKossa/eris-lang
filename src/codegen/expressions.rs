@@ -398,6 +398,8 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         let fields = self.structs.get(struct_name.to_str().unwrap()).unwrap();
         let field_index = fields.get(field).unwrap();
         let field_type = ty.get_field_type_at_index(*field_index as u32).unwrap();
+        dbg!(field_index);
+        dbg!(struct_ptr);
         let field_ptr = self
             .builder
             .build_struct_gep(struct_ptr, *field_index as u32, "fieldaccess")

@@ -9,7 +9,7 @@ use inkwell::context::Context;
 
 use parser::ast::blocks::Block;
 
-use semantic::visitor::SemanticVisitor;
+use semantic::semantic_visitor::SemanticVisitor;
 
 use crate::codegen::visitor::CodeGenVisitor;
 use crate::lexer::lexer::Lexer;
@@ -17,6 +17,7 @@ use crate::parser::parser::Parser;
 
 fn main() {
     let path = std::env::args().nth(1).unwrap();
+    println!("path: {}", path);
     let test_file = std::fs::read_to_string(path).unwrap();
     let lexer = Lexer::new(&test_file);
     let parser = Parser::new(lexer.into_iter());

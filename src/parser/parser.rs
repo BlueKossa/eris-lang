@@ -548,6 +548,9 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     let statement = self.parse_identifier()?;
                     statements.push(statement);
                 }
+                Token::Comment => {
+                    self.eat()?;
+                }
                 _ => {
                     return Err(ParseError {
                         kind: ParseErrorKind::UnexpectedToken(self.peek()?),

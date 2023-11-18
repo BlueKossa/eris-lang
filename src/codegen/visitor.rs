@@ -323,12 +323,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     _ => {}
                 }
                 println!("ty: {:?}, lty: {:?}", ty, lty);
-                if ty != lty {
-                    let value = value.into_int_value().const_cast(ty.into_int_type(), false);
-                    (value.into(), ty)
-                } else {
-                    (value, lty)
-                }
+                (value, lty)
             }
             None => {
                 //REVIEW: Can you do this?
@@ -355,26 +350,26 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         } else {
             self.builder.position_at_end(entry_block);
         }
+        let alloca = self.builder.build_alloca(ty, "").unwrap();
 
-        let alloca = if let BasicValueEnum::PointerValue(ptr) = value {
-            if !lty.is_pointer_type() {
-                //value = self.builder.build_load(ptr, "load");
+        if let BasicValueEnum::PointerValue(ptr) = value {
+            dbg!(local.ident);
+            dbg!(lty);
+            if lty.is_pointer_type() {
+                self.builder.position_at_end(current_block);
+                self.builder.build_store(alloca, value).unwrap();
+            } else {
+                ptr.replace_all_uses_with(alloca);
+                ptr.as_instruction_value()
+                    .unwrap()
+                    .remove_from_basic_block();
+
+                self.builder.position_at_end(current_block);
+
             }
-            let alloca = self.builder.build_alloca(ty, "").unwrap();
-
-            ptr.replace_all_uses_with(alloca);
-            ptr.as_instruction_value()
-                .unwrap()
-                .remove_from_basic_block();
-
-            self.builder.position_at_end(current_block);
-
-            alloca
         } else {
-            let alloca = self.builder.build_alloca(ty, "").unwrap();
             self.builder.position_at_end(current_block);
             self.builder.build_store(alloca, value).unwrap();
-            alloca
         };
 
         self.values.insert(local.ident, (alloca.into(), ty));
