@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::parser::ast::functions::{FnDecl, FnSig};
-use crate::parser::ast::items::Item;
+use crate::parser::ast::items::{Item, ItemKind};
 use crate::parser::ast::locals::Local;
 use crate::parser::ast::statements::Statement;
 use crate::parser::ast::types::{Type, TypeKind};
@@ -76,9 +76,10 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
 
     fn traverse_function<'b>(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
         let sig = &mut function.sig;
-        println!("sig: {:?}", sig);
-        self.fn_decls
-            .insert(function.name, sig.clone());
+        if self.fn_decls.get(function.name).is_none() {
+            self.fn_decls
+                .insert(function.name, sig.clone());
+        }
         for (name, ty) in sig.args.iter() {
             self.values.insert(name, ty.to_owned());
         }
@@ -97,7 +98,26 @@ impl<'a> SemanticVisitor<'a> {
     }
 
     pub fn run(&mut self, entry: &mut Block<'a>) {
+        self.run_light(entry);
         self.traverse_block(entry);
+    }
+
+    pub fn run_light(&mut self, entry: &Block<'a>) {
+        for statement in entry.statements.iter() {
+            match statement {
+                Statement::Item(item) => {
+                    match item.kind {
+                        ItemKind::Function(ref func) => {
+                            let sig = &func.sig;
+                            let name = func.name;
+                            self.fn_decls.insert(name, sig.clone());
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 
     pub(super) fn type_check(&self, a: &Type, b: &Type) {

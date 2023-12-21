@@ -174,8 +174,9 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
     fn visit_literal(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
         create_local_tuple!(Literal, expr, lit);
         let val: BasicValueEnum = match lit.kind {
-            LiteralKind::Int(i) => self.context.i32_type().const_int(i as u64, false).into(),
-            LiteralKind::Float(f) => self.context.f64_type().const_float(f).into(),
+            LiteralKind::Int(i, ref ty) => 
+                self.to_llvm_type(ty).into_int_type().const_int(i as u64, false).into(),
+            LiteralKind::Float(f, ref ty) => self.to_llvm_type(ty).into_float_type().const_float(f).into(),
             LiteralKind::String(s) => {
                 let mut esc = false;
                 let bytes = &s[1..s.len() - 1];

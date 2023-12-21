@@ -234,12 +234,14 @@ impl<'a> CodeGenVisitor<'a> {
             .unwrap();
         let file_type = FileType::Object;
 
+        let object_file_name = format!("{}.o", path);
+
         target_machine
-            .write_to_file(&self.module, file_type, Path::new(path))
+            .write_to_file(&self.module, file_type, Path::new(object_file_name.as_str()))
             .unwrap();
 
         let mut command = Command::new("cc");
-        command.arg(path).arg("-o").arg("a.out");
+        command.arg(object_file_name).arg("-o").arg(path);
         let _r = command.output().unwrap();
     }
 

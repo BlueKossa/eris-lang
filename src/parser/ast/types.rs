@@ -27,6 +27,7 @@ pub enum TypeKind<'a> {
     Ref(Type<'a>),
 }
 
+
 impl<'a> Type<'a> {
     pub fn from_str(name: &'a str) -> Self {
         match name {
@@ -58,6 +59,10 @@ impl<'a> Type<'a> {
 
     pub fn array_type(ty: Type<'a>, size: usize) -> Self {
         TypeKind::Array(ty, size).into()
+    }
+
+    pub fn inner(&self) -> &TypeKind<'a> {
+        &*self.kind
     }
 }
 

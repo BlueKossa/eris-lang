@@ -87,10 +87,19 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 match literal {
                     Number(n) => match n {
                         Integer(i) => {
-                            ExprKind::Literal(LiteralKind::Int(i.parse().unwrap()).into()).into()
+                            let (int, ty) = i.split_once('_').unwrap_or((i, "i32"));
+                            println!("int: {}, ty: {}", int, ty);
+                            ExprKind::Literal(
+                                LiteralKind::Int(int.parse().unwrap(), Type::from_str(ty)).into(),
+                            )
+                            .into()
                         }
                         Float(f) => {
-                            ExprKind::Literal(LiteralKind::Float(f.parse().unwrap()).into()).into()
+                            let (float, ty) = f.split_once('_').unwrap_or((f, "f32"));
+                            ExprKind::Literal(
+                                LiteralKind::Float(float.parse().unwrap(), Type::from_str(ty)).into(),
+                            )
+                            .into()
                         }
                     },
                     String(s) => ExprKind::Literal(LiteralKind::String(s).into()).into(),
@@ -615,7 +624,11 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             }
         }
 
-        Ok(FnSig { args, ret, is_variadic: false })
+        Ok(FnSig {
+            args,
+            ret,
+            is_variadic: false,
+        })
     }
 
     fn parse_fn_decl(&mut self, name: &'a str, fn_type: Type<'a>) -> ParseResult<'a, FnDecl<'a>> {
@@ -636,7 +649,9 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
             }
             Token::Symbol(Semicolon) => {
                 self.eat()?;
-                block = Block { statements: Vec::new() };
+                block = Block {
+                    statements: Vec::new(),
+                };
             }
             t => {
                 return Err(ParseError {
@@ -670,7 +685,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         ty: field.1,
                     });
                 }
-                Token::Symbol(Comma) => {
+                Token::Symbol(Semicolon) => {
                     self.eat()?;
                 }
                 Token::Symbol(BraceClose) => {

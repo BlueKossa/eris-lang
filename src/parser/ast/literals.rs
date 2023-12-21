@@ -2,8 +2,8 @@ use super::types::{Type, TypeKind};
 
 #[derive(Debug, Clone)]
 pub enum LiteralKind<'a> {
-    Int(i64),
-    Float(f64),
+    Int(i64, Type<'a>),
+    Float(f64, Type<'a>),
     String(&'a str),
     Bool(bool),
 }
@@ -21,9 +21,9 @@ impl<'a> Into<Literal<'a>> for LiteralKind<'a> {
 
 impl<'a> Literal<'a> {
     pub fn to_ty(&self) -> Type<'a> {
-        match self.kind {
-            LiteralKind::Int(_) => TypeKind::I32,
-            LiteralKind::Float(_) => TypeKind::F32,
+        match &self.kind {
+            LiteralKind::Int(_, ty) => ty.inner().clone(),
+            LiteralKind::Float(_, ty) => ty.inner().clone(),
             LiteralKind::String(_) => TypeKind::Str,
             LiteralKind::Bool(_) => TypeKind::Bool,
         }
@@ -33,9 +33,9 @@ impl<'a> Literal<'a> {
 
 impl<'a> std::fmt::Display for Literal<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
-            LiteralKind::Int(int) => write!(f, "{}", int),
-            LiteralKind::Float(float) => write!(f, "{}", float),
+        match &self.kind {
+            LiteralKind::Int(int, ty) => write!(f, "{}_{}", int, ty),
+            LiteralKind::Float(float, ty) => write!(f, "{}_{}", float, ty),
             LiteralKind::String(string) => write!(f, "{}", string),
             LiteralKind::Bool(boolean) => write!(f, "{}", boolean),
         }

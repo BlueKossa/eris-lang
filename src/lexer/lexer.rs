@@ -78,14 +78,27 @@ impl<'a> Lexer<'a> {
 
     fn eat_number(&mut self) -> LexResult<'a> {
         let mut dot = false;
-        let number = self.eat_while(|c| {
-            if c == '.' {
-                if dot {
-                    return false;
+        let mut type_specifier = false;
+        let mut number = self.eat_while(|c| {
+            match c {
+                '.' => {
+                    if dot {
+                        return false;
+                    }
+                    dot = true;
                 }
-                dot = true;
+                '_' => {
+                    println!("type_specifier = true");
+                    type_specifier = true;
+                    return true;
+                }
+                _ => {}
             }
-
+            println!("c = {}", c);
+            if type_specifier && c.is_alphabetic() {
+                println!("type_specifier = false");
+                return true;
+            }
             c.is_numeric() || c == '.'
         });
 
