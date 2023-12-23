@@ -27,7 +27,7 @@ macro_rules! create_local_tuple {
 impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
     type ExprReturnType = Option<CodeGenResult<'a>>;
 
-    fn visit_expr(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_expr(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         match expr {
             ExprKind::Binary(_, _, _) => self.visit_binary(expr),
             ExprKind::Unary(_, _) => self.visit_unary(expr),
@@ -50,7 +50,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         }
     }
 
-    fn visit_binary(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_binary(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         use inkwell::{FloatPredicate as FP, IntPredicate as IP};
         create_local_tuple!(Binary, expr, op, lhs, rhs);
         let lhs = self.visit_expr(&mut lhs.kind).unwrap();
@@ -138,7 +138,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_unary(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_unary(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Unary, expr, op, expr);
         let expr = self.visit_expr(&mut expr.kind).unwrap();
         let mut expr_val = expr.value;
@@ -171,15 +171,22 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_literal(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_literal(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Literal, expr, lit);
+        let data = self.get_data(&lit.span).unwrap();
+        let ty = self.to_llvm_type(&lit.type_);
         let val: BasicValueEnum = match lit.kind {
-            LiteralKind::Int(i, ref ty) => 
-                self.to_llvm_type(ty).into_int_type().const_int(i as u64, false).into(),
-            LiteralKind::Float(f, ref ty) => self.to_llvm_type(ty).into_float_type().const_float(f).into(),
-            LiteralKind::String(s) => {
+            LiteralKind::Int => {
+                let i = data.parse::<u64>().unwrap();
+                ty.into_int_type().const_int(i, false).into()
+            }
+            LiteralKind::Float => {
+                let f = data.parse::<f64>().unwrap();
+                ty.into_float_type().const_float(f).into()
+            }
+            LiteralKind::String => {
                 let mut esc = false;
-                let bytes = &s[1..s.len() - 1];
+                let bytes = &data[1..data.len() - 1];
                 let mut s = String::new();
                 for c in bytes.chars() {
                     if esc {
@@ -205,7 +212,10 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
                     ty: Some(ptr.get_type().into()),
                 });
             }
-            LiteralKind::Bool(b) => self.context.bool_type().const_int(b as u64, false).into(),
+            LiteralKind::Bool => {
+                let b = data.parse::<bool>().unwrap();
+                ty.into_int_type().const_int(b as u64, false).into()
+            }
         };
         return Some(CodeGenResult {
             value: val,
@@ -213,7 +223,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         });
     }
 
-    fn visit_address_of(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_address_of(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Address, expr, expr);
         if let ExprKind::Var(_var) = *expr.kind {
             return self.visit_expr(&mut expr.kind);
@@ -228,7 +238,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_deref(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_deref(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Deref, expr, expr);
         let expr = self.visit_expr(&mut expr.kind).unwrap();
         let ty = expr.ty.unwrap();
@@ -245,7 +255,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_cast(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_cast(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Cast, expr, expr, ty);
 
         let expr = self.visit_expr(&mut expr.kind).unwrap();
@@ -267,7 +277,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_array(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_array(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Array, expr, exprs);
         // Constant arrays
         // How it SHOULD be done:
@@ -350,9 +360,11 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_struct(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_struct(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(StructInit, expr, ident, fields);
-        let struct_ty = self.module.get_struct_type(ident).unwrap();
+        let module = self.get_current_llvm_module().unwrap();
+        let ident = self.get_data(&ident).unwrap();
+        let struct_ty = module.get_struct_type(&ident).unwrap();
         let struct_val = self.builder.build_alloca(struct_ty, "struct").unwrap();
 
         for (i, field) in fields.iter_mut().enumerate() {
@@ -374,7 +386,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_field(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_field(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(FieldAccess, expr, struct_, field);
         let struct_ = self.visit_expr(&mut struct_.kind).unwrap();
         let struct_val = struct_.value;
@@ -397,6 +409,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
 
         let struct_name = ty.get_name().unwrap();
         let fields = self.structs.get(struct_name.to_str().unwrap()).unwrap();
+        let field: &str = &*self.get_data(&field).unwrap();
         let field_index = fields.get(field).unwrap();
         let field_type = ty.get_field_type_at_index(*field_index as u32).unwrap();
         dbg!(field_index);
@@ -411,7 +424,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_index(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_index(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(ArrayIndex, expr, array, index);
         let array = self.visit_expr(&mut array.kind).unwrap();
         let array_val = array.value;
@@ -460,9 +473,11 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         }
     }
 
-    fn visit_call(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_call(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Call, expr, ident, params);
-        let func = self.module.get_function(ident).unwrap();
+        let module = self.get_current_llvm_module().unwrap();
+        let ident = self.get_data(&ident).unwrap();
+        let func = module.get_function(&ident).unwrap();
         let mut args: Vec<BasicMetadataValueEnum> = Vec::new();
         let mut attributed_params: Vec<(u32, Attribute)> = Vec::new();
         for (i, param) in params.iter_mut().enumerate() {
@@ -524,7 +539,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         });
     }
 
-    fn visit_if(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_if(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(If, expr, cond, body);
         let cond = self.visit_expr(&mut cond.kind).unwrap();
         let cond_val = cond.value.into_int_value();
@@ -548,7 +563,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         None
     }
 
-    fn visit_loop(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_loop(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Loop, expr, cond, body);
         let start_block = self.builder.get_insert_block().unwrap();
         let func = start_block.get_parent().unwrap();
@@ -577,7 +592,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         None
     }
 
-    fn visit_assign(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_assign(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Assign, expr, lhs_expr, rhs_expr);
         let rhs = self.visit_expr(&mut rhs_expr.kind).unwrap();
         let mut rhs_val = rhs.value;
@@ -595,9 +610,10 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         None
     }
 
-    fn visit_var(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_var(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Var, expr, ident);
-        let val = self.values.get(ident).unwrap();
+        let ident = self.get_data(&ident).unwrap();
+        let val = self.values.get(&ident).unwrap();
 
         Some(CodeGenResult {
             value: val.0,
@@ -605,7 +621,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         })
     }
 
-    fn visit_break(&mut self, _expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_break(&mut self, _expr: &mut ExprKind) -> Self::ExprReturnType {
         let insert_block = self.builder.get_insert_block().unwrap();
         let end_block = self.current_loop_exit.unwrap();
         self.builder.build_unconditional_branch(end_block);
@@ -616,7 +632,7 @@ impl<'a> ExpressionVisitor<'a> for CodeGenVisitor<'a> {
         None
     }
 
-    fn visit_return(&mut self, expr: &mut ExprKind<'a>) -> Self::ExprReturnType {
+    fn visit_return(&mut self, expr: &mut ExprKind) -> Self::ExprReturnType {
         create_local_tuple!(Return, expr, expr);
         if let Some(expr) = expr {
             let expr = self.visit_expr(&mut expr.kind).unwrap();

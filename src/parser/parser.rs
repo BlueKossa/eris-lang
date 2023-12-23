@@ -4,14 +4,15 @@ use std::{iter::Peekable, slice::Iter};
 use itertools::{peek_nth, PeekNth};
 
 use crate::lexer::lexer::LexResult;
-use crate::lexer::token::Token;
+use crate::lexer::token::{Token, TokenKind};
 use crate::lexer::{
     literal::{
-        Literal::{self, *},
-        Number::{self, *},
+        Literal as LLit,
+        Number as LNum,
     },
     symbol::Symbol::{self, *},
 };
+use crate::span::Span;
 
 use super::ast::functions::{FnDecl, FnSig};
 use super::ast::locals::Local;
@@ -21,8 +22,8 @@ use super::ast::{
     blocks::Block,
     expressions::{Expr, ExprKind},
     items::{Item, ItemKind},
-    keywords::Keyword::{self, *},
-    literals::{Literal as AstLiteral, LiteralKind},
+    keywords::Keyword as KW,
+    literals::{Literal, LiteralKind},
     operators::{BinaryOp, UnaryOp},
     statements::Statement,
     structs::Struct,
@@ -30,14 +31,15 @@ use super::ast::{
 
 pub struct Parser<'a, I: Iterator> {
     pub tokens: PeekNth<I>,
+    source: &'a str,
     pub errors: Vec<&'a str>,
 }
 
 #[derive(Debug)]
 enum ParseErrorKind<'a> {
-    UnexpectedToken(Token<'a>),
+    UnexpectedToken(Token),
     LexError(&'a str),
-    NotAnExpression(Token<'a>),
+    NotAnExpression(Token),
 }
 
 #[derive(Debug)]
@@ -47,20 +49,21 @@ pub struct ParseError<'a> {
 
 type ParseResult<'a, T> = Result<T, ParseError<'a>>;
 
-impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
-    pub fn new(tokens: I) -> Self {
+impl<'a, I: Iterator<Item = LexResult>> Parser<'a, I> {
+    pub fn new(tokens: I, source: &'a str) -> Self {
         let tokens = peek_nth(tokens);
         Self {
             tokens,
+            source,
             errors: Vec::new(),
         }
     }
 
-    fn peek(&mut self) -> ParseResult<'a, Token<'a>> {
+    fn peek(&mut self) -> ParseResult<'a, Token> {
         self.peek_nth(0)
     }
 
-    fn peek_nth(&mut self, n: usize) -> ParseResult<'a, Token<'a>> {
+    fn peek_nth(&mut self, n: usize) -> ParseResult<'a, Token> {
         match self.tokens.peek_nth(n) {
             Some(Ok(token)) => Ok(*token),
             _ => Err(ParseError {
@@ -69,7 +72,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         }
     }
 
-    fn eat(&mut self) -> ParseResult<'a, Token<'a>> {
+    fn eat(&mut self) -> ParseResult<'a, Token> {
         match self.tokens.next() {
             Some(Ok(token)) => Ok(token),
             _ => Err(ParseError {
@@ -78,51 +81,73 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         }
     }
 
-    pub fn parse_expression(&mut self, precedence: u8) -> ParseResult<'a, Expr<'a>> {
+    pub fn parse_expression(&mut self, precedence: u8) -> ParseResult<'a, Expr> {
         let left_token = self.peek()?;
 
-        let mut lhs: Expr<'a> = match left_token {
-            Token::Literal(literal) => {
+        let mut lhs: Expr = match left_token.kind {
+            TokenKind::Literal(literal) => {
                 self.eat()?;
                 match literal {
-                    Number(n) => match n {
-                        Integer(i) => {
-                            let (int, ty) = i.split_once('_').unwrap_or((i, "i32"));
-                            println!("int: {}, ty: {}", int, ty);
-                            ExprKind::Literal(
-                                LiteralKind::Int(int.parse().unwrap(), Type::from_str(ty)).into(),
-                            )
-                            .into()
+                    LLit::Number(n) => match n {
+                        LNum::Integer{signed, size} => {
+                            let literal = Literal {
+                                kind: LiteralKind::Int,
+                                span: left_token.span,
+                                type_: Type::int(signed, size),
+                            };
+                            ExprKind::Literal(literal).into()
                         }
-                        Float(f) => {
-                            let (float, ty) = f.split_once('_').unwrap_or((f, "f32"));
-                            ExprKind::Literal(
-                                LiteralKind::Float(float.parse().unwrap(), Type::from_str(ty)).into(),
-                            )
-                            .into()
+                        LNum::Float{size} => {
+                            let literal = Literal {
+                                kind: LiteralKind::Float,
+                                span: left_token.span,
+                                type_: Type::float(size),
+                            };
+                            ExprKind::Literal(literal).into()
                         }
                     },
-                    String(s) => ExprKind::Literal(LiteralKind::String(s).into()).into(),
-                    Boolean(b) => ExprKind::Literal(LiteralKind::Bool(b).into()).into(),
+                    LLit::String => {
+                        let literal = Literal {
+                            kind: LiteralKind::String,
+                            span: left_token.span,
+                            type_: Type::str(),
+                        };
+                        ExprKind::Literal(literal).into()
+                    }
+                    LLit::Boolean => {
+                        let literal = Literal {
+                            kind: LiteralKind::Bool,
+                            span: left_token.span,
+                            type_: Type::bool(),
+                        };
+                        ExprKind::Literal(literal).into()
+                    }
                 }
             }
 
-            Token::Identifier(id) => {
+            TokenKind::Identifier => {
+                let id = left_token.span.data(self.source);
                 self.eat()?;
                 match id {
-                    "true" => ExprKind::Literal(LiteralKind::Bool(true).into()).into(),
-                    "false" => ExprKind::Literal(LiteralKind::Bool(false).into()).into(),
-                    _ => match self.peek()? {
-                        Token::Symbol(BraceOpen) if precedence == 0 => {
+                    "true" | "false" => {
+                        let literal = Literal {
+                            kind: LiteralKind::Bool,
+                            span: left_token.span,
+                            type_: Type::bool(),
+                        };
+                        ExprKind::Literal(literal).into()
+                    }
+                    _ => match self.peek()?.kind {
+                        TokenKind::Symbol(BraceOpen) if precedence == 0 => {
                             self.eat()?;
                             let mut fields = Vec::new();
                             loop {
-                                match self.peek()? {
-                                    Token::Symbol(BraceClose) => {
+                                match self.peek()?.kind {
+                                    TokenKind::Symbol(BraceClose) => {
                                         self.eat()?;
                                         break;
                                     }
-                                    Token::Symbol(Comma) => {
+                                    TokenKind::Symbol(Comma) => {
                                         self.eat()?;
                                     }
                                     _ => {
@@ -131,16 +156,16 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                                     }
                                 }
                             }
-                            ExprKind::StructInit(id, fields).into()
+                            ExprKind::StructInit(left_token.span, fields).into()
                         }
-                        _ => ExprKind::Var(id).into(),
+                        _ => ExprKind::Var(left_token.span).into(),
                     },
                 }
             }
-            Token::Symbol(ParenOpen) => {
+            TokenKind::Symbol(ParenOpen) => {
                 self.eat()?;
                 let expr = self.parse_expression(0)?;
-                if let Token::Symbol(ParenClose) = self.peek()? {
+                if let TokenKind::Symbol(ParenClose) = self.peek()?.kind {
                     self.eat()?;
                     expr
                 } else {
@@ -149,21 +174,21 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     });
                 }
             }
-            Token::Symbol(And) => {
+            TokenKind::Symbol(And) => {
                 self.eat()?;
                 let expr = self.parse_expression(0)?;
                 ExprKind::Address(expr).into()
             }
-            Token::Symbol(BracketOpen) => {
+            TokenKind::Symbol(BracketOpen) => {
                 self.eat()?;
                 let mut array = Vec::new();
                 loop {
-                    match self.peek()? {
-                        Token::Symbol(BracketClose) => {
+                    match self.peek()?.kind {
+                        TokenKind::Symbol(BracketClose) => {
                             self.eat()?;
                             break;
                         }
-                        Token::Symbol(Comma) => {
+                        TokenKind::Symbol(Comma) => {
                             self.eat()?;
                         }
                         _ => {
@@ -174,7 +199,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 }
                 ExprKind::Array(array).into()
             }
-            Token::Symbol(Asterisk) => {
+            TokenKind::Symbol(Asterisk) => {
                 self.eat()?;
                 let expr = self.parse_expression(0)?;
                 ExprKind::Deref(expr).into()
@@ -187,24 +212,30 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         };
 
         loop {
-            let right_token = match self.peek() {
-                Ok(Token::Symbol(ColonEqual))
-                | Ok(Token::Symbol(Colon))
-                | Ok(Token::Symbol(ColonColon)) => {
+            let right_token = if let Ok(token) = self.peek() {
+                token
+            } else {
+                break;
+            };
+            match right_token.kind {
+                TokenKind::Symbol(ColonEqual)
+                | TokenKind::Symbol(Colon)
+                | TokenKind::Symbol(ColonColon) => {
                     return Err(ParseError {
                         kind: ParseErrorKind::UnexpectedToken(self.peek()?),
                     })
                 }
-                Ok(Token::Symbol(Semicolon)) => break,
-                Ok(token) => token,
-                Err(_) => break,
-            };
+                TokenKind::Symbol(Semicolon) => break,
+                _ => (),
+            }
 
-            match right_token {
-                Token::Symbol(Dot) => {
+            match right_token.kind {
+                TokenKind::Symbol(Dot) => {
                     self.eat()?;
-                    let field = match self.peek()? {
-                        Token::Identifier(id) => id,
+                    let field = match self.peek()?.kind {
+                        TokenKind::Identifier => {
+                            self.peek()?.span
+                        }
                         _ => {
                             return Err(ParseError {
                                 kind: ParseErrorKind::UnexpectedToken(self.peek()?),
@@ -215,10 +246,10 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     lhs = ExprKind::FieldAccess(lhs, field).into();
                     continue;
                 }
-                Token::Symbol(BracketOpen) => {
+                TokenKind::Symbol(BracketOpen) => {
                     self.eat()?;
                     let index = self.parse_expression(0)?;
-                    if let Token::Symbol(BracketClose) = self.peek()? {
+                    if let TokenKind::Symbol(BracketClose) = self.peek()?.kind {
                         self.eat()?;
                         lhs = ExprKind::ArrayIndex(lhs, index).into();
                         continue;
@@ -228,12 +259,13 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         });
                     }
                 }
-                Token::Symbol(DotAsterisk) => {
+                TokenKind::Symbol(DotAsterisk) => {
                     self.eat()?;
                     lhs = ExprKind::Deref(lhs).into();
                     continue;
                 }
-                Token::Identifier(ident) => {
+                TokenKind::Identifier => {
+                    let ident = self.peek()?.span.data(self.source);
                     if ident == "as" {
                         self.eat()?;
                         let ty = self.parse_type()?;
@@ -244,13 +276,14 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                 _ => (),
             }
 
-            if let (Token::Symbol(ParenOpen), Token::Identifier(fn_name)) =
-                (right_token, left_token)
+            if let (TokenKind::Symbol(ParenOpen), TokenKind::Identifier) =
+                (right_token.kind, left_token.kind)
             {
+                let fn_name = left_token.span;
                 return self.parse_fn_call(fn_name);
             }
 
-            let (op, p): (BinaryOp, u8) = match right_token.try_into() {
+            let (op, p): (BinaryOp, u8) = match right_token.kind.try_into() {
                 Ok(op) => (op, op.precedence()),
                 Err(_) => {
                     break;
@@ -279,50 +312,59 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         Ok(lhs)
     }
 
-    fn parse_type(&mut self) -> ParseResult<'a, Type<'a>> {
+    fn parse_type(&mut self) -> ParseResult<'a, Type> {
         let token = self.peek()?;
 
-        let mut ty = match token {
-            Token::Identifier(name) => {
+        let mut ty = match token.kind {
+            TokenKind::Identifier => {
+                let name = token.span.data(self.source);
                 self.eat()?;
                 Ok(Type::from_str(name))
             }
-            Token::Symbol(And) => {
+            TokenKind::Symbol(And) => {
                 self.eat()?;
                 let ty = self.parse_type()?;
                 Ok(Type::ref_type(ty))
             }
             t => Err(ParseError {
-                kind: ParseErrorKind::UnexpectedToken(t),
+                kind: ParseErrorKind::UnexpectedToken(token),
             }),
         };
 
         loop {
-            match self.peek()? {
-                Token::Symbol(Semicolon)
-                | Token::Symbol(Equal)
-                | Token::Symbol(ParenClose)
-                | Token::Symbol(ParenOpen)
-                | Token::Symbol(BracketClose)
-                | Token::Symbol(Comma) => break,
-                Token::Symbol(And) => {
+            match self.peek()?.kind {
+                TokenKind::Symbol(Semicolon)
+                | TokenKind::Symbol(Equal)
+                | TokenKind::Symbol(ParenClose)
+                | TokenKind::Symbol(ParenOpen)
+                | TokenKind::Symbol(BracketClose)
+                | TokenKind::Symbol(Comma) => break,
+                TokenKind::Symbol(And) => {
                     self.eat()?;
                     ty = Ok(Type::ref_type(ty?));
                 }
-                Token::Symbol(BracketOpen) => {
+                TokenKind::Symbol(BracketOpen) => {
                     self.eat()?;
-                    let size = self.eat()?;
+                    let size_token = self.eat()?;
 
-                    let size = match size {
-                        Token::Literal(Number(Integer(n))) => n.parse::<usize>().unwrap(),
-                        _ => {
-                            return Err(ParseError {
-                                kind: ParseErrorKind::UnexpectedToken(self.peek()?),
-                            })
+                    let size = if let TokenKind::Literal(lit) = size_token.kind {
+                        if let LLit::Number(_) = lit {
+                            let data = size_token.span.data(self.source);
+                            Some(data.parse::<usize>().unwrap())
+                        } else {
+                            None
                         }
+                    } else {
+                        None
                     };
-                    self.eat()?;
-                    ty = Ok(Type::array_type(ty?, size));
+                    if let Some(size) = size {
+                        self.eat()?;
+                        ty = Ok(Type::array_type(ty?, size));
+                    } else {
+                        return Err(ParseError {
+                            kind: ParseErrorKind::UnexpectedToken(self.peek()?),
+                        });
+                    }
                 }
                 _ => {
                     return Err(ParseError {
@@ -334,9 +376,10 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         ty
     }
 
-    fn parse_local_decl(&mut self, is_mut: bool) -> ParseResult<'a, Local<'a>> {
-        let name = match self.peek()? {
-            Token::Identifier(name) => name,
+    fn parse_local_decl(&mut self, is_mut: bool) -> ParseResult<'a, Local> {
+        let token = self.peek()?;
+        let name = match token.kind {
+            TokenKind::Identifier => token.span,
             _ => {
                 return Err(ParseError {
                     kind: ParseErrorKind::UnexpectedToken(self.peek()?),
@@ -345,11 +388,11 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         };
         self.eat()?;
         let mut ty = None;
-        match self.peek()? {
-            Token::Symbol(Colon) => {
+        match self.peek()?.kind {
+            TokenKind::Symbol(Colon) => {
                 self.eat()?;
                 ty = Some(self.parse_type()?);
-                if let Token::Symbol(Equal) = self.peek()? {
+                if let TokenKind::Symbol(Equal) = self.peek()?.kind {
                     self.eat()?;
                 } else {
                     return Ok(Local {
@@ -360,7 +403,7 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     });
                 }
             }
-            Token::Symbol(ColonEqual) => {
+            TokenKind::Symbol(ColonEqual) => {
                 self.eat()?;
             }
             _ => {
@@ -380,36 +423,39 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         })
     }
 
-    fn parse_mut_local_decl(&mut self) -> ParseResult<'a, Local<'a>> {
+    fn parse_mut_local_decl(&mut self) -> ParseResult<'a, Local> {
         self.eat()?;
         return self.parse_local_decl(true);
     }
 
-    fn parse_return(&mut self) -> ParseResult<'a, Expr<'a>> {
+    fn parse_return(&mut self) -> ParseResult<'a, Expr> {
         self.eat()?;
-        if let Token::Symbol(Semicolon) = self.peek()? {
+        if let TokenKind::Symbol(Semicolon) = self.peek()?.kind {
             return Ok(ExprKind::Return(None).into());
         }
         let expr = self.parse_expression(0)?;
         Ok(ExprKind::Return(Some(expr)).into())
     }
 
-    fn parse_while(&mut self) -> ParseResult<'a, Expr<'a>> {
+    fn parse_while(&mut self) -> ParseResult<'a, Expr> {
         self.eat()?;
         let cond = self.parse_expression(0)?;
         let body = self.parse_block()?;
         Ok(ExprKind::Loop(cond, body).into())
     }
 
-    pub fn parse_identifier(&mut self) -> ParseResult<'a, Statement<'a>> {
-        if let Token::Identifier(ident) = self.peek()? {
-            if let Some(keyword) = Keyword::from_str(ident) {
+    pub fn parse_identifier(&mut self) -> ParseResult<'a, Statement> {
+        let token = self.peek()?;
+        if let TokenKind::Identifier = token.kind {
+            let ident = token.span;
+
+            if let Some(keyword) = KW::from_str(ident.data(self.source)) {
                 match keyword {
-                    Mut => {
+                    KW::Mut => {
                         let local = self.parse_mut_local_decl()?;
                         return Ok(Statement::Local(local));
                     }
-                    Return => {
+                    KW::Return => {
                         let expr = self.parse_return()?;
                         return Ok(Statement::Expression(expr));
                     }
@@ -417,14 +463,16 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     //    let func = self.parse_fn_decl()?;
                     //    return Ok(Statement::Item(ItemKind::Function(func).into()));
                     //}
-                    While => {
+                    KW::While => {
                         let while_loop = self.parse_while()?;
                         return Ok(Statement::Expression(while_loop));
                     }
-                    Loop => {
+                    KW::Loop => {
                         self.eat()?;
-                        let b = AstLiteral {
-                            kind: LiteralKind::Bool(true),
+                        let b = Literal {
+                            kind: LiteralKind::Bool,
+                            span: Span::empty(),
+                            type_: Type::bool(),
                         };
                         let cond = ExprKind::Literal(b).into();
                         let loop_expr = self.parse_block()?;
@@ -432,17 +480,17 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                             ExprKind::Loop(cond, loop_expr).into(),
                         ));
                     }
-                    Break => {
+                    KW::Break => {
                         self.eat()?;
                         return Ok(Statement::Expression(ExprKind::Break.into()));
                     }
-                    If => {
+                    KW::If => {
                         self.eat()?;
                         let cond = self.parse_expression(0)?;
                         let body = self.parse_block()?;
                         return Ok(Statement::Expression(ExprKind::If(cond, body).into()));
                     }
-                    Foreign => {
+                    KW::Foreign => {
                         self.eat()?;
                         let block = self.parse_block()?;
                         return Ok(Statement::Item(ItemKind::Foreign(block).into()));
@@ -454,20 +502,22 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                     }
                 }
             } else {
-                match self.peek_nth(1)? {
-                    Token::Symbol(ColonEqual) | Token::Symbol(Colon) => {
+                match self.peek_nth(1)?.kind {
+                    TokenKind::Symbol(ColonEqual) | TokenKind::Symbol(Colon) => {
                         let local = self.parse_local_decl(false)?;
                         return Ok(Statement::Local(local));
                     }
-                    Token::Symbol(ColonColon) => {
+                    TokenKind::Symbol(ColonColon) => {
                         // Eat ident and :: such as:
                         // {main ::} ()...
                         self.eat()?;
                         self.eat()?;
-                        match self.peek()? {
-                            Token::Identifier(name) => {
-                                match Keyword::from_str(name) {
-                                    Some(Struct) => {
+                        let token = self.peek()?;
+                        match token.kind {
+                            TokenKind::Identifier => {
+                                let name = token.span.data(self.source);
+                                match KW::from_str(name) {
+                                    Some(KW::Struct) => {
                                         let struct_decl = self.parse_struct_decl(ident)?;
                                         return Ok(Statement::Item(
                                             ItemKind::Struct(struct_decl).into(),
@@ -481,19 +531,19 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                                     _ => {}
                                 }
                                 let ty = self.parse_type()?;
-                                if let Token::Symbol(ParenOpen) = self.peek()? {
+                                if let TokenKind::Symbol(ParenOpen) = self.peek()?.kind {
                                     let func = self.parse_fn_decl(ident, ty)?;
                                     return Ok(Statement::Item(ItemKind::Function(func).into()));
                                 }
                             }
-                            Token::Symbol(And) => {
+                            TokenKind::Symbol(And) => {
                                 let ty = self.parse_type()?;
-                                if let Token::Symbol(ParenOpen) = self.peek()? {
+                                if let TokenKind::Symbol(ParenOpen) = self.peek()?.kind {
                                     let func = self.parse_fn_decl(ident, ty)?;
                                     return Ok(Statement::Item(ItemKind::Function(func).into()));
                                 }
                             }
-                            Token::Symbol(ParenOpen) => {
+                            TokenKind::Symbol(ParenOpen) => {
                                 let func = self.parse_fn_decl(ident, TypeKind::Void.into())?;
                                 return Ok(Statement::Item(ItemKind::Function(func).into()));
                             }
@@ -516,19 +566,19 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         })
     }
 
-    fn parse_fn_call(&mut self, fn_name: &'a str) -> ParseResult<'a, Expr<'a>> {
+    fn parse_fn_call(&mut self, fn_name: Span) -> ParseResult<'a, Expr> {
         self.eat()?;
-        let mut args: Vec<Expr<'a>> = Vec::new();
+        let mut args: Vec<Expr> = Vec::new();
         loop {
-            match self.peek()? {
-                Token::Symbol(ParenClose) => {
+            match self.peek()?.kind {
+                TokenKind::Symbol(ParenClose) => {
                     self.eat()?;
                     break;
                 }
-                Token::Symbol(Semicolon) => {
+                TokenKind::Symbol(Semicolon) => {
                     self.eat()?;
                 }
-                Token::Symbol(Comma) => {
+                TokenKind::Symbol(Comma) => {
                     self.eat()?;
                 }
                 _ => {
@@ -540,24 +590,24 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         Ok(ExprKind::Call(fn_name, args).into())
     }
 
-    fn parse_block(&mut self) -> ParseResult<'a, Block<'a>> {
+    fn parse_block(&mut self) -> ParseResult<'a, Block> {
         self.eat()?;
-        let mut statements: Vec<Statement<'a>> = Vec::new();
+        let mut statements: Vec<Statement> = Vec::new();
         loop {
-            match self.peek()? {
-                Token::Symbol(BraceClose) => {
+            match self.peek()?.kind {
+                TokenKind::Symbol(BraceClose) => {
                     self.eat()?;
                     break;
                 }
-                Token::Symbol(Semicolon) => {
+                TokenKind::Symbol(Semicolon) => {
                     self.eat()?;
                 }
                 // Attempt to parse an expression, if there is a :=, parse a local decl
-                Token::Identifier(_) => {
+                TokenKind::Identifier => {
                     let statement = self.parse_identifier()?;
                     statements.push(statement);
                 }
-                Token::Comment => {
+                TokenKind::Comment => {
                     self.eat()?;
                 }
                 _ => {
@@ -570,17 +620,18 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         Ok(Block { statements })
     }
 
-    fn parse_arg(&mut self) -> ParseResult<'a, (&'a str, Type<'a>)> {
+    fn parse_arg(&mut self) -> ParseResult<'a, (Span, Type)> {
         let name;
-        if let Token::Identifier(n) = self.peek()? {
+        let token = self.peek()?;
+        if let TokenKind::Identifier = self.peek()?.kind {
             self.eat()?;
-            name = n;
+            name = token.span;
         } else {
             return Err(ParseError {
                 kind: ParseErrorKind::UnexpectedToken(self.peek()?),
             });
         }
-        if let Token::Symbol(Colon) = self.peek()? {
+        if let TokenKind::Symbol(Colon) = self.peek()?.kind {
             self.eat()?;
         } else {
             return Err(ParseError {
@@ -591,23 +642,24 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         Ok((name, ty))
     }
 
-    fn parse_fn_header(&mut self, ret: Type<'a>) -> ParseResult<'a, FnSig<'a>> {
+    fn parse_fn_header(&mut self, ret: Type) -> ParseResult<'a, FnSig> {
         self.eat()?;
         let mut args = Vec::new();
         loop {
-            match self.peek()? {
-                Token::Identifier(_) => {
+            let token = self.peek()?;
+            match token.kind {
+                TokenKind::Identifier => {
                     let arg = self.parse_arg()?;
                     args.push(arg);
                 }
-                Token::Symbol(Comma) => {
+                TokenKind::Symbol(Comma) => {
                     self.eat()?;
                 }
-                Token::Symbol(ParenClose) => {
+                TokenKind::Symbol(ParenClose) => {
                     self.eat()?;
                     break;
                 }
-                Token::Symbol(Ellipsis) => {
+                TokenKind::Symbol(Ellipsis) => {
                     self.eat()?;
                     self.eat()?;
                     return Ok(FnSig {
@@ -616,9 +668,9 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
                         is_variadic: true,
                     });
                 }
-                t => {
+                _ => {
                     return Err(ParseError {
-                        kind: ParseErrorKind::UnexpectedToken(t),
+                        kind: ParseErrorKind::UnexpectedToken(token),
                     })
                 }
             }
@@ -631,10 +683,10 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         })
     }
 
-    fn parse_fn_decl(&mut self, name: &'a str, fn_type: Type<'a>) -> ParseResult<'a, FnDecl<'a>> {
+    fn parse_fn_decl(&mut self, name: Span, fn_type: Type) -> ParseResult<'a, FnDecl> {
         let sig;
 
-        if let Token::Symbol(ParenOpen) = self.peek()? {
+        if let TokenKind::Symbol(ParenOpen) = self.peek()?.kind {
             sig = self.parse_fn_header(fn_type)?;
         } else {
             return Err(ParseError {
@@ -643,19 +695,20 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         }
 
         let block;
-        match self.peek()? {
-            Token::Symbol(BraceOpen) => {
+        let token = self.peek()?;
+        match token.kind {
+            TokenKind::Symbol(BraceOpen) => {
                 block = self.parse_block()?;
             }
-            Token::Symbol(Semicolon) => {
+            TokenKind::Symbol(Semicolon) => {
                 self.eat()?;
                 block = Block {
                     statements: Vec::new(),
                 };
             }
-            t => {
+            _ => {
                 return Err(ParseError {
-                    kind: ParseErrorKind::UnexpectedToken(t),
+                    kind: ParseErrorKind::UnexpectedToken(token),
                 })
             }
         }
@@ -666,35 +719,37 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
         })
     }
 
-    fn parse_struct_decl(&mut self, name: &'a str) -> ParseResult<'a, Struct<'a>> {
+    fn parse_struct_decl(&mut self, name: Span) -> ParseResult<'a, Struct> {
         self.eat()?;
-        if let Token::Symbol(BraceOpen) = self.peek()? {
+        let token = self.peek()?;
+        if let TokenKind::Symbol(BraceOpen) = token.kind {
             self.eat()?;
         } else {
             return Err(ParseError {
-                kind: ParseErrorKind::UnexpectedToken(self.peek()?),
+                kind: ParseErrorKind::UnexpectedToken(token),
             });
         }
         let mut fields: Vec<Field> = Vec::new();
         loop {
-            match self.peek()? {
-                Token::Identifier(_) => {
+            let token = self.peek()?;
+            match token.kind {
+                TokenKind::Identifier => {
                     let field = self.parse_arg()?;
                     fields.push(Field {
                         name: field.0,
                         ty: field.1,
                     });
                 }
-                Token::Symbol(Semicolon) => {
+                TokenKind::Symbol(Semicolon) => {
                     self.eat()?;
                 }
-                Token::Symbol(BraceClose) => {
+                TokenKind::Symbol(BraceClose) => {
                     self.eat()?;
                     break;
                 }
-                t => {
+                _ => {
                     return Err(ParseError {
-                        kind: ParseErrorKind::UnexpectedToken(t),
+                        kind: ParseErrorKind::UnexpectedToken(token),
                     })
                 }
             }
@@ -703,12 +758,12 @@ impl<'a, I: Iterator<Item = LexResult<'a>>> Parser<'a, I> {
     }
 }
 
-impl<'a, I: Iterator<Item = LexResult<'a>>> Iterator for Parser<'a, I> {
-    type Item = ParseResult<'a, Statement<'a>>;
+impl<'a, I: Iterator<Item = LexResult>> Iterator for Parser<'a, I> {
+    type Item = ParseResult<'a, Statement>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.peek() {
-            Ok(Token::EOF) => None,
+        match self.peek().map(|t| t.kind) {
+            Ok(TokenKind::EOF) => None,
             Ok(_) => Some(self.parse_identifier()),
             Err(_) => None,
         }

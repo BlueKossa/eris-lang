@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::parser::ast::functions::{FnDecl, FnSig};
 use crate::parser::ast::items::{Item, ItemKind};
@@ -9,21 +10,22 @@ use crate::visitor::chainmap::ChainMap;
 use crate::visitor::visitor_pattern::ExpressionVisitor;
 use crate::{parser::ast::blocks::Block, visitor::visitor_pattern::MutVisitorPattern};
 
-pub struct SemanticVisitor<'a> {
-    pub(super) values: ChainMap<&'a str, Type<'a>>,
-    pub(crate) fn_decls: HashMap<&'a str, FnSig<'a>>,
-    pub(crate) structs: HashMap<&'a str, Vec<(&'a str, Type<'a>)>>,
+pub struct SemanticVisitor {
+    pub(super) values: ChainMap<Rc<str>, Type>,
+    pub(crate) fn_decls: HashMap<Rc<str>, FnSig>,
+    pub(crate) structs: HashMap<Rc<str>, Vec<(Rc<str>, Type)>>,
+    pub(crate) source: String,
 }
 
 #[inline(always)]
-fn type_mismatch<'a>(t1: &TypeKind<'a>, t2: &TypeKind<'a>) {
+fn type_mismatch(t1: &TypeKind, t2: &TypeKind) {
     panic!("Type mismatch: {:?} != {:?}", t1, t2);
 }
 
-impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
-    type ReturnType = Option<Type<'a>>;
+impl<'a> MutVisitorPattern<'a> for SemanticVisitor {
+    type ReturnType = Option<Type>;
 
-    fn traverse_block(&mut self, block: &mut Block<'a>) -> Self::ReturnType {
+    fn traverse_block(&mut self, block: &mut Block) -> Self::ReturnType {
         self.values.insert_map();
         for stmt in block.statements.iter_mut() {
             self.traverse_statement(stmt);
@@ -32,7 +34,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
         None
     }
 
-    fn traverse_statement(&mut self, statement: &mut Statement<'a>) -> Self::ReturnType {
+    fn traverse_statement(&mut self, statement: &mut Statement) -> Self::ReturnType {
         match statement {
             Statement::Local(local) => self.traverse_local(local),
             Statement::Expression(expr) => self.visit_expr(&mut expr.kind),
@@ -40,7 +42,7 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
         }
     }
 
-    fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
+    fn traverse_local(&mut self, local: &mut Local) -> Self::ReturnType {
         let ty = if let Some(expr) = &mut local.value {
             self.visit_expr(&mut expr.kind)
         } else {
@@ -51,12 +53,13 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
         } else if let (Some(t), None) = (ty, &local.ty) {
             local.ty = Some(t);
         }
+        let ident = local.ident.data(&self.source);
         self.values
-            .insert(local.ident, local.ty.as_ref().unwrap().to_owned());
+            .insert(ident.into(), local.ty.as_ref().unwrap().to_owned());
         None
     }
 
-    fn traverse_item(&mut self, item: &mut Item<'a>) -> Self::ReturnType {
+    fn traverse_item(&mut self, item: &mut Item) -> Self::ReturnType {
         use crate::parser::ast::items::ItemKind as IK;
         match &mut item.kind {
             IK::Function(decl) => self.traverse_function(decl),
@@ -64,9 +67,10 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
                 let fields = s
                     .fields
                     .iter()
-                    .map(|f| (f.name, f.ty.to_owned()))
+                    .map(|f| (f.name.data(&self.source).into(), f.ty.to_owned()))
                     .collect::<Vec<_>>();
-                self.structs.insert(s.name, fields);
+                let name = s.name.data(&self.source);
+                self.structs.insert(name.into(), fields);
                 None
             }
             IK::Constant(_, _, _) => todo!(),
@@ -74,13 +78,15 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
         }
     }
 
-    fn traverse_function<'b>(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
+    fn traverse_function<'b>(&mut self, function: &mut FnDecl) -> Self::ReturnType {
         let sig = &mut function.sig;
-        if self.fn_decls.get(function.name).is_none() {
+        if self.fn_decls.get(function.name.data(&self.source)).is_none() {
+            let name: Rc<str> = function.name.data(&self.source).into();
             self.fn_decls
-                .insert(function.name, sig.clone());
+                .insert(name, sig.clone());
         }
         for (name, ty) in sig.args.iter() {
+            let name: Rc<str> = name.data(&self.source).into();
             self.values.insert(name, ty.to_owned());
         }
         self.traverse_block(&mut function.body);
@@ -88,29 +94,31 @@ impl<'a> MutVisitorPattern<'a> for SemanticVisitor<'a> {
     }
 }
 
-impl<'a> SemanticVisitor<'a> {
+impl SemanticVisitor {
     pub fn new() -> Self {
         Self {
             values: ChainMap::new(),
             fn_decls: HashMap::new(),
             structs: HashMap::new(),
+            source: String::new(),
         }
     }
 
-    pub fn run(&mut self, entry: &mut Block<'a>) {
+    pub fn run(&mut self, entry: &mut Block, source: String) {
+        self.source = source;
         self.run_light(entry);
         self.traverse_block(entry);
     }
 
-    pub fn run_light(&mut self, entry: &Block<'a>) {
+    pub fn run_light(&mut self, entry: &Block) {
         for statement in entry.statements.iter() {
             match statement {
                 Statement::Item(item) => {
                     match item.kind {
                         ItemKind::Function(ref func) => {
                             let sig = &func.sig;
-                            let name = func.name;
-                            self.fn_decls.insert(name, sig.clone());
+                            let name = func.name.data(&self.source);
+                            self.fn_decls.insert(name.into(), sig.clone());
                         }
                         _ => {}
                     }

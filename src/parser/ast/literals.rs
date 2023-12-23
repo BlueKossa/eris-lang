@@ -1,43 +1,36 @@
+use crate::span::Span;
+
 use super::types::{Type, TypeKind};
 
 #[derive(Debug, Clone)]
-pub enum LiteralKind<'a> {
-    Int(i64, Type<'a>),
-    Float(f64, Type<'a>),
-    String(&'a str),
-    Bool(bool),
+pub enum LiteralKind {
+    Int,
+    Float,
+    String,
+    Bool,
 }
 
 #[derive(Debug, Clone)]
-pub struct Literal<'a> {
-    pub kind: LiteralKind<'a>,
+pub struct Literal {
+    pub kind: LiteralKind,
+    pub span: Span,
+    pub type_: Type,
 }
 
-impl<'a> Into<Literal<'a>> for LiteralKind<'a> {
-    fn into(self) -> Literal<'a> {
-        Literal { kind: self }
+impl Literal {
+    pub fn to_ty(&self) -> Type {
+        self.type_.clone()
     }
 }
 
-impl<'a> Literal<'a> {
-    pub fn to_ty(&self) -> Type<'a> {
-        match &self.kind {
-            LiteralKind::Int(_, ty) => ty.inner().clone(),
-            LiteralKind::Float(_, ty) => ty.inner().clone(),
-            LiteralKind::String(_) => TypeKind::Str,
-            LiteralKind::Bool(_) => TypeKind::Bool,
-        }
-        .into()
-    }
-}
-
-impl<'a> std::fmt::Display for Literal<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.kind {
-            LiteralKind::Int(int, ty) => write!(f, "{}_{}", int, ty),
-            LiteralKind::Float(float, ty) => write!(f, "{}_{}", float, ty),
-            LiteralKind::String(string) => write!(f, "{}", string),
-            LiteralKind::Bool(boolean) => write!(f, "{}", boolean),
-        }
-    }
-}
+//impl std::fmt::Display for Literal {
+//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//        //match &self.kind {
+//        //    LiteralKind::Int(int, ty) => write!(f, "{}_{}", int, ty),
+//        //    LiteralKind::Float(float, ty) => write!(f, "{}_{}", float, ty),
+//        //    LiteralKind::String(string) => write!(f, "{}", string),
+//        //    LiteralKind::Bool(boolean) => write!(f, "{}", boolean),
+//        //}
+//        write!(f, "{}", self.span)
+//    }
+//}

@@ -1,5 +1,5 @@
 use crate::lexer::symbol::Symbol::*;
-use crate::lexer::token::Token;
+use crate::lexer::token::{Token, TokenKind};
 
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
@@ -92,67 +92,67 @@ impl BinaryOp {
     }
 }
 
-impl<'a> TryFrom<Token<'a>> for BinaryOp {
+impl TryFrom<TokenKind> for BinaryOp {
     type Error = ();
 
-    fn try_from(value: Token<'a>) -> Result<Self, Self::Error> {
+    fn try_from(value: TokenKind) -> Result<Self, Self::Error> {
         return match value {
-            Token::Symbol(Plus) => Ok(BinaryOp::Add),
-            Token::Symbol(Minus) => Ok(BinaryOp::Subtract),
-            Token::Symbol(Asterisk) => Ok(BinaryOp::Multiply),
-            Token::Symbol(Slash) => Ok(BinaryOp::Divide),
-            Token::Symbol(Percent) => Ok(BinaryOp::Modulo),
-            Token::Symbol(EqualEqual) => Ok(BinaryOp::Equal),
-            Token::Symbol(BangEqual) => Ok(BinaryOp::NotEqual),
-            Token::Symbol(Less) => Ok(BinaryOp::LessThan),
-            Token::Symbol(LessEqual) => Ok(BinaryOp::LessThanEqual),
-            Token::Symbol(Greater) => Ok(BinaryOp::GreaterThan),
-            Token::Symbol(GreaterEqual) => Ok(BinaryOp::GreaterThanEqual),
-            Token::Symbol(AndAnd) => Ok(BinaryOp::And),
-            Token::Symbol(PipePipe) => Ok(BinaryOp::Or),
-            Token::Symbol(Equal) => Ok(BinaryOp::Assign),
-            Token::Symbol(PlusEqual) => Ok(BinaryOp::AddAssign),
-            Token::Symbol(MinusEqual) => Ok(BinaryOp::SubtractAssign),
-            Token::Symbol(AsteriskEqual) => Ok(BinaryOp::MultiplyAssign),
-            Token::Symbol(SlashEqual) => Ok(BinaryOp::DivideAssign),
-            Token::Symbol(PercentEqual) => Ok(BinaryOp::ModuloAssign),
+            TokenKind::Symbol(Plus) => Ok(BinaryOp::Add),
+            TokenKind::Symbol(Minus) => Ok(BinaryOp::Subtract),
+            TokenKind::Symbol(Asterisk) => Ok(BinaryOp::Multiply),
+            TokenKind::Symbol(Slash) => Ok(BinaryOp::Divide),
+            TokenKind::Symbol(Percent) => Ok(BinaryOp::Modulo),
+            TokenKind::Symbol(EqualEqual) => Ok(BinaryOp::Equal),
+            TokenKind::Symbol(BangEqual) => Ok(BinaryOp::NotEqual),
+            TokenKind::Symbol(Less) => Ok(BinaryOp::LessThan),
+            TokenKind::Symbol(LessEqual) => Ok(BinaryOp::LessThanEqual),
+            TokenKind::Symbol(Greater) => Ok(BinaryOp::GreaterThan),
+            TokenKind::Symbol(GreaterEqual) => Ok(BinaryOp::GreaterThanEqual),
+            TokenKind::Symbol(AndAnd) => Ok(BinaryOp::And),
+            TokenKind::Symbol(PipePipe) => Ok(BinaryOp::Or),
+            TokenKind::Symbol(Equal) => Ok(BinaryOp::Assign),
+            TokenKind::Symbol(PlusEqual) => Ok(BinaryOp::AddAssign),
+            TokenKind::Symbol(MinusEqual) => Ok(BinaryOp::SubtractAssign),
+            TokenKind::Symbol(AsteriskEqual) => Ok(BinaryOp::MultiplyAssign),
+            TokenKind::Symbol(SlashEqual) => Ok(BinaryOp::DivideAssign),
+            TokenKind::Symbol(PercentEqual) => Ok(BinaryOp::ModuloAssign),
             _ => Err(()),
         };
     }
 }
 
-impl std::fmt::Display for BinaryOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let op = match self {
-            BinaryOp::Add => "+",
-            BinaryOp::Subtract => "-",
-            BinaryOp::Multiply => "*",
-            BinaryOp::Divide => "/",
-            BinaryOp::Modulo => "%",
-            BinaryOp::Equal => "==",
-            BinaryOp::NotEqual => "!=",
-            BinaryOp::LessThan => "<",
-            BinaryOp::LessThanEqual => "<=",
-            BinaryOp::GreaterThan => ">",
-            BinaryOp::GreaterThanEqual => ">=",
-            BinaryOp::And => "&&",
-            BinaryOp::Or => "||",
-            BinaryOp::Assign => "=",
-            BinaryOp::AddAssign => "+=",
-            BinaryOp::SubtractAssign => "-=",
-            BinaryOp::MultiplyAssign => "*=",
-            BinaryOp::DivideAssign => "/=",
-            BinaryOp::ModuloAssign => "%=",
-        };
-        write!(f, "{}", op)
-    }
-}
-
-impl std::fmt::Display for UnaryOp {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UnaryOp::Negate => write!(f, "-"),
-            UnaryOp::Not => write!(f, "!"),
-        }
-    }
-}
+//impl std::fmt::Display for BinaryOp {
+//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//        let op = match self {
+//            BinaryOp::Add => "+",
+//            BinaryOp::Subtract => "-",
+//            BinaryOp::Multiply => "*",
+//            BinaryOp::Divide => "/",
+//            BinaryOp::Modulo => "%",
+//            BinaryOp::Equal => "==",
+//            BinaryOp::NotEqual => "!=",
+//            BinaryOp::LessThan => "<",
+//            BinaryOp::LessThanEqual => "<=",
+//            BinaryOp::GreaterThan => ">",
+//            BinaryOp::GreaterThanEqual => ">=",
+//            BinaryOp::And => "&&",
+//            BinaryOp::Or => "||",
+//            BinaryOp::Assign => "=",
+//            BinaryOp::AddAssign => "+=",
+//            BinaryOp::SubtractAssign => "-=",
+//            BinaryOp::MultiplyAssign => "*=",
+//            BinaryOp::DivideAssign => "/=",
+//            BinaryOp::ModuloAssign => "%=",
+//        };
+//        write!(f, "{}", op)
+//    }
+//}
+//
+//impl std::fmt::Display for UnaryOp {
+//    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//        match self {
+//            UnaryOp::Negate => write!(f, "-"),
+//            UnaryOp::Not => write!(f, "!"),
+//        }
+//    }
+//}

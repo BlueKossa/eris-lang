@@ -1,11 +1,11 @@
-use std::{collections::HashMap, path::Path, process::Command};
+use std::{collections::HashMap, path::Path, process::Command, rc::Rc};
 
 use inkwell::{
     attributes::{Attribute, AttributeLoc},
     basic_block::BasicBlock,
     builder::Builder,
     context::Context,
-    module::Module,
+    module::Module as LLVMModule,
     targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target, TargetMachine},
     types::{
         BasicMetadataTypeEnum, BasicType, BasicTypeEnum, FunctionType, MetadataType,
@@ -29,30 +29,32 @@ use crate::{
     visitor::{
         chainmap::ChainMap,
         visitor_pattern::{ExpressionVisitor, MutVisitorPattern},
-    },
+    }, module::{ModuleMap, Module}, span::Span, semantic::semantic_visitor::SemanticVisitor,
 };
 
 pub struct CodeGenVisitor<'a> {
     pub(super) builder: Builder<'a>,
     pub(super) context: &'a Context,
-    pub(super) module: Module<'a>,
-    pub(super) values: ChainMap<&'a str, (BasicValueEnum<'a>, BasicTypeEnum<'a>)>,
-    pub(super) structs: HashMap<&'a str, HashMap<&'a str, usize>>,
+    pub(super) modules: ModuleMap<'a>,
+    pub(super) module_idx: Option<usize>,
+    pub(super) values: ChainMap<Rc<str>, (BasicValueEnum<'a>, BasicTypeEnum<'a>)>,
+    pub(super) structs: HashMap<Rc<str>, HashMap<Rc<str>, usize>>,
 
     pub(super) current_loop_exit: Option<BasicBlock<'a>>,
     pub(super) current_loop_cond: Option<BasicBlock<'a>>,
 }
 
 impl<'a> CodeGenVisitor<'a> {
-    pub fn new(context: &'a Context, name: &'a str) -> Self {
-        let module = context.create_module(name);
+    pub fn new(context: &'a Context) -> Self {
+        let modules = ModuleMap::new();
         let builder = context.create_builder();
         let values = ChainMap::new();
         let structs = HashMap::new();
         Self {
             builder,
             context,
-            module,
+            modules,
+            module_idx: None,
             values,
             structs,
 
@@ -61,7 +63,29 @@ impl<'a> CodeGenVisitor<'a> {
         }
     }
 
-    pub(super) fn to_llvm_type(&self, ty: &Type<'a>) -> BasicTypeEnum<'a> {
+    pub fn get_data(&self, span: &Span) -> Option<Rc<str>> {
+        if let Some(idx) = self.module_idx {
+            self.modules.get_module(idx).map(|m| {
+                m.get_data(span)
+            })
+        } else {
+            None
+        }
+    }
+
+    pub fn get_current_module(&self) -> Option<&Module<'a>> {
+        if let Some(idx) = self.module_idx {
+            self.modules.get_module(idx).map(|m| m)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_current_llvm_module(&self) -> Option<&LLVMModule<'a>> {
+        self.get_current_module().map(|m| &m.llvm_module)
+    }
+
+    pub(super) fn to_llvm_type(&self, ty: &Type) -> BasicTypeEnum<'a> {
         match &*ty.kind {
             TypeKind::I8 => self.context.i8_type().into(),
             TypeKind::I16 => self.context.i16_type().into(),
@@ -76,7 +100,8 @@ impl<'a> CodeGenVisitor<'a> {
             TypeKind::Bool => self.context.bool_type().into(),
             TypeKind::Char => self.context.i8_type().into(),
             TypeKind::Struct(ident) => {
-                let struct_ty = self.module.get_struct_type(ident);
+                let module = self.get_current_llvm_module().unwrap();
+                let struct_ty = module.get_struct_type(ident);
                 if let Some(struct_ty) = struct_ty {
                     struct_ty.into()
                 } else {
@@ -107,7 +132,7 @@ impl<'a> CodeGenVisitor<'a> {
 
     fn to_llvm_fn_type(
         &self,
-        ty: &Type<'a>,
+        ty: &Type,
         args: &[BasicMetadataTypeEnum<'a>],
         variadic: bool,
     ) -> FunctionType<'a> {
@@ -120,7 +145,8 @@ impl<'a> CodeGenVisitor<'a> {
             TypeKind::Char => self.context.i8_type().fn_type(args, variadic),
             TypeKind::Void => self.context.void_type().fn_type(args, variadic),
             TypeKind::Struct(ident) => {
-                let struct_ty = self.module.get_struct_type(ident);
+                let module = self.get_current_llvm_module().unwrap();
+                let struct_ty = module.get_struct_type(ident);
                 if let Some(struct_ty) = struct_ty {
                     struct_ty.fn_type(args, variadic)
                 } else {
@@ -141,7 +167,7 @@ impl<'a> CodeGenVisitor<'a> {
         }
     }
 
-    pub fn declare_functions(&mut self, fn_decls: &HashMap<&'a str, FnSig<'a>>) {
+    pub fn declare_functions(&mut self, fn_decls: &HashMap<Rc<str>, FnSig>) {
         use BasicTypeEnum as BTE;
         for (name, sig) in fn_decls {
             let mut param_types: Vec<BasicMetadataTypeEnum> = Vec::new();
@@ -174,44 +200,61 @@ impl<'a> CodeGenVisitor<'a> {
                 param_types.push(ty.into());
             }
             let fn_type = self.to_llvm_fn_type(&sig.ret, &param_types, sig.is_variadic);
-
-            let func = self.module.add_function(name, fn_type, None);
+            let module = self.get_current_llvm_module().unwrap();
+            let func = module.add_function(name, fn_type, None);
             for (i, attr) in attributed_params.drain(..) {
                 func.add_attribute(AttributeLoc::Param(i), attr);
             }
         }
     }
 
-    pub fn declare_structs(&mut self, structs: &HashMap<&'a str, Vec<(&'a str, Type<'a>)>>) {
+    pub fn declare_structs(&mut self, structs: &HashMap<Rc<str>, Vec<(Rc<str>, Type)>>) {
         // Add all structs to the module
         for (name, _) in structs.iter() {
             self.context.opaque_struct_type(name);
         }
         // Generate the structs
         for (name, ptr) in structs.iter() {
-            let mut struct_types: HashMap<&'a str, usize> = HashMap::new();
+            let mut struct_types: HashMap<Rc<str>, usize> = HashMap::new();
             let mut types: Vec<BasicTypeEnum> = Vec::new();
             for (i, (n, ty)) in ptr.iter().enumerate() {
                 types.push(self.to_llvm_type(ty));
-                struct_types.insert(n, i);
+                struct_types.insert(n.to_owned(), i);
             }
             let struct_type = self.context.get_struct_type(name).unwrap();
             struct_type.set_body(&types, false);
 
-            self.structs.insert(name, struct_types);
+            self.structs.insert(name.to_owned(), struct_types);
         }
     }
 
-    pub fn run(&mut self, block: &mut Block<'a>) {
-        self.traverse_block(block);
+    pub fn run(&mut self, root: &str) {
+        let root_module = self.context.create_module(root);
+        let idx = self.modules.add_module(root, root_module);
+        self.module_idx = Some(idx);
+        let module = self.get_current_module().unwrap();
+        let mut ast = module.ast.clone();
+        let mut semantic_visitor = SemanticVisitor::new();
+        semantic_visitor.run(&mut ast, module.source.clone());
+        self.declare_structs(&semantic_visitor.structs);
+        self.declare_functions(&semantic_visitor.fn_decls);
+
+        self.traverse_block(&mut ast);
+        self.dump_file();
+        self.generate_machine_code("a.out");
     }
 
     pub fn dump(&self) {
-        self.module.print_to_stderr();
+        for module in &self.modules.modules {
+            module.llvm_module.print_to_stderr();
+        }
     }
 
-    pub fn dump_file(&self, path: &str) {
-        self.module.print_to_file(path).unwrap();
+    pub fn dump_file(&self) {
+        for module in &self.modules.modules {
+            let path = format!("./out/{}.ll", module.name);
+            module.llvm_module.print_to_file(path).unwrap();
+        }
     }
 
     #[cfg(target_os = "linux")]
@@ -235,14 +278,17 @@ impl<'a> CodeGenVisitor<'a> {
         let file_type = FileType::Object;
 
         let object_file_name = format!("{}.o", path);
+        let module = self.get_current_llvm_module().unwrap();
+        module.print_to_stderr();
 
         target_machine
-            .write_to_file(&self.module, file_type, Path::new(object_file_name.as_str()))
+            .write_to_file(&module, file_type, Path::new(object_file_name.as_str()))
             .unwrap();
 
         let mut command = Command::new("cc");
         command.arg(object_file_name).arg("-o").arg(path);
-        let _r = command.output().unwrap();
+        let r = command.output().unwrap();
+        println!("{}", String::from_utf8_lossy(&r.stdout));
     }
 
     #[cfg(target_os = "windows")]
@@ -282,7 +328,7 @@ pub struct CodeGenResult<'a> {
 impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
     type ReturnType = Option<CodeGenResult<'a>>;
 
-    fn traverse_block(&mut self, block: &mut Block<'a>) -> Self::ReturnType {
+    fn traverse_block(&mut self, block: &mut Block) -> Self::ReturnType {
         self.values.insert_map();
         for statement in block.statements.iter_mut() {
             self.traverse_statement(statement);
@@ -291,7 +337,7 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         None
     }
 
-    fn traverse_statement(&mut self, statement: &mut Statement<'a>) -> Self::ReturnType {
+    fn traverse_statement(&mut self, statement: &mut Statement) -> Self::ReturnType {
         match statement {
             Statement::Local(local) => {
                 self.traverse_local(local);
@@ -308,15 +354,12 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         }
     }
 
-    fn traverse_local(&mut self, local: &mut Local<'a>) -> Self::ReturnType {
+    fn traverse_local(&mut self, local: &mut Local) -> Self::ReturnType {
         let ty = self.to_llvm_type(local.ty.as_ref().unwrap());
-        println!("ty: {:?}", ty);
-        println!("local: {:?}", local.ty);
         let (value, lty) = match local.value {
             Some(ref mut expr) => {
                 let res = self.visit_expr(&mut expr.kind).unwrap();
                 let (mut value, lty) = (res.value, res.ty.unwrap());
-                println!("name: {}, ty: {:?}", local.ident, lty);
                 match *expr.kind {
                     ExprKind::Var(_) | ExprKind::FieldAccess(_, _) | ExprKind::ArrayIndex(_, _) => {
                         let ptr = value.into_pointer_value();
@@ -324,13 +367,13 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
                     }
                     _ => {}
                 }
-                println!("ty: {:?}, lty: {:?}", ty, lty);
                 (value, lty)
             }
             None => {
                 //REVIEW: Can you do this?
                 let alloca = self.builder.build_alloca(ty, "").unwrap();
-                self.values.insert(local.ident, (alloca.into(), ty));
+                let ident = self.get_data(&local.ident).unwrap();
+                self.values.insert(ident, (alloca.into(), ty));
                 return None;
             }
         };
@@ -374,11 +417,12 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
             self.builder.build_store(alloca, value).unwrap();
         };
 
-        self.values.insert(local.ident, (alloca.into(), ty));
+        let ident = self.get_data(&local.ident).unwrap();
+        self.values.insert(ident, (alloca.into(), ty));
         None
     }
 
-    fn traverse_item(&mut self, item: &mut Item<'a>) -> Self::ReturnType {
+    fn traverse_item(&mut self, item: &mut Item) -> Self::ReturnType {
         match &mut item.kind {
             ItemKind::Function(func) => {
                 self.traverse_function(func);
@@ -392,17 +436,20 @@ impl<'a> MutVisitorPattern<'a> for CodeGenVisitor<'a> {
         None
     }
 
-    fn traverse_function(&mut self, function: &mut FnDecl<'a>) -> Self::ReturnType {
+    fn traverse_function(&mut self, function: &mut FnDecl) -> Self::ReturnType {
         if function.body.statements.is_empty() {
             return None;
         }
         let sig = &function.sig;
-        let func = self.module.get_function(function.name).unwrap();
+        let module = self.get_current_llvm_module().unwrap();
+        let name = self.get_data(&function.name).unwrap();
+        let func = module.get_function(&name).unwrap();
         self.values.insert_map();
         for (i, arg) in sig.args.iter().enumerate() {
             let a = func.get_nth_param(i as u32).unwrap();
             dbg!(self.to_llvm_type(&arg.1));
-            self.values.insert(arg.0, (a, self.to_llvm_type(&arg.1)));
+            let name = self.get_data(&arg.0).unwrap();
+            self.values.insert(name, (a, self.to_llvm_type(&arg.1)));
         }
         let entry = self.context.append_basic_block(func, "entry");
         self.builder.position_at_end(entry);

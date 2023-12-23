@@ -1,10 +1,12 @@
+use crate::span::Span;
+
 #[derive(Debug, Clone, PartialEq)]
-pub struct Type<'a> {
-    pub kind: Box<TypeKind<'a>>,
+pub struct Type {
+    pub kind: Box<TypeKind>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum TypeKind<'a> {
+pub enum TypeKind {
     Void,
     I8,
     I16,
@@ -22,14 +24,14 @@ pub enum TypeKind<'a> {
     Bool,
     Char,
     Str,
-    Array(Type<'a>, usize),
-    Struct(&'a str),
-    Ref(Type<'a>),
+    Array(Type, usize),
+    Struct(String),
+    Ref(Type),
 }
 
 
-impl<'a> Type<'a> {
-    pub fn from_str(name: &'a str) -> Self {
+impl Type {
+    pub fn from_str(name: &str) -> Self {
         match name {
             "void" => TypeKind::Void,
             "i8" => TypeKind::I8,
@@ -48,33 +50,72 @@ impl<'a> Type<'a> {
             "bool" => TypeKind::Bool,
             "char" => TypeKind::Char,
             "str" => TypeKind::Str,
-            _ => TypeKind::Struct(name),
+            _ => TypeKind::Struct(name.to_owned()),
         }
         .into()
     }
 
-    pub fn ref_type(ty: Type<'a>) -> Self {
+    pub fn int(signed: bool, size: usize) -> Self {
+        match (signed, size) {
+            (true, 8) => TypeKind::I8,
+            (true, 16) => TypeKind::I16,
+            (true, 32) => TypeKind::I32,
+            (true, 64) => TypeKind::I64,
+            (true, 128) => TypeKind::I128,
+            (false, 8) => TypeKind::U8,
+            (false, 16) => TypeKind::U16,
+            (false, 32) => TypeKind::U32,
+            (false, 64) => TypeKind::U64,
+            (false, 128) => TypeKind::U128,
+            _ => panic!("invalid integer type"),
+        }
+        .into()
+    }
+
+    pub fn float(size: usize) -> Self {
+        match size {
+            32 => TypeKind::F32,
+            64 => TypeKind::F64,
+            128 => TypeKind::F128,
+            _ => panic!("invalid float type"),
+        }
+        .into()
+    }
+
+    pub fn bool() -> Self {
+        TypeKind::Bool.into()
+    }
+
+    pub fn char() -> Self {
+        TypeKind::Char.into()
+    }
+
+    pub fn str() -> Self {
+        TypeKind::Str.into()
+    }
+
+    pub fn ref_type(ty: Type) -> Self {
         TypeKind::Ref(ty).into()
     }
 
-    pub fn array_type(ty: Type<'a>, size: usize) -> Self {
+    pub fn array_type(ty: Type, size: usize) -> Self {
         TypeKind::Array(ty, size).into()
     }
 
-    pub fn inner(&self) -> &TypeKind<'a> {
+    pub fn inner(&self) -> &TypeKind {
         &*self.kind
     }
 }
 
-impl<'a> Into<Type<'a>> for TypeKind<'a> {
-    fn into(self) -> Type<'a> {
+impl Into<Type> for TypeKind {
+    fn into(self) -> Type {
         Type {
             kind: Box::new(self),
         }
     }
 }
 
-impl<'a> std::fmt::Display for Type<'a> {
+impl std::fmt::Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &*self.kind {
             TypeKind::Void => write!(f, "void"),
